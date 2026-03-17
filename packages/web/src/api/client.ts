@@ -1,7 +1,7 @@
 const BASE_URL = '/api';
 
 class ApiClient {
-  private token: string | null = null;
+  private token: string | null = localStorage.getItem('doc-triage-token');
 
   setToken(token: string | null) {
     this.token = token;
