@@ -1,6 +1,7 @@
 import Tesseract from 'tesseract.js';
-// @ts-expect-error pdf-parse has no proper ESM export
-import pdfParse from 'pdf-parse';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
 import mammoth from 'mammoth';
 
 const MAX_PAGES_OCR = 20;
