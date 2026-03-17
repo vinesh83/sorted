@@ -327,7 +327,7 @@ router.post('/:id/retry-classify', async (req, res) => {
       id,
     );
 
-    logUsage(doc.id, inputTokens, outputTokens, 'reclassification');
+    logUsage(id, inputTokens, outputTokens, 'reclassification');
 
     const updated = db.prepare(`
       SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path

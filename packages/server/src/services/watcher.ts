@@ -149,8 +149,8 @@ export async function startWatcher() {
     if (!watcherRunning) return;
 
     try {
-      dropboxConnected = true;
       await pollOnce();
+      dropboxConnected = true;
     } catch (err) {
       dropboxConnected = false;
       console.error('[watcher] Poll error:', err);

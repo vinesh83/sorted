@@ -137,6 +137,6 @@ async function doProcess(processedFileId: number): Promise<void> {
       VALUES (?, ?, ?, ?, 'unclassified', datetime('now'))
     `).run(processedFileId, extractedText, ocrPartial ? 1 : 0, err instanceof Error ? err.message : String(err));
 
-    db.prepare("UPDATE processed_files SET status = 'classified' WHERE id = ?").run(processedFileId);
+    db.prepare("UPDATE processed_files SET status = 'classification_failed' WHERE id = ?").run(processedFileId);
   }
 }

@@ -94,6 +94,8 @@ export function useDocument(id: number | null) {
   const retryAttach = useCallback(async () => {
     if (!id) return;
     await api.post(`/documents/${id}/retry-attach`);
+    const res = await api.get<{ document: Document }>(`/documents/${id}`);
+    setDocument(res.document);
   }, [id]);
 
   return { document, loading, load, updateField, claim, skip, approve, retryClassify, retryAttach };
