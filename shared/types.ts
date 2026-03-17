@@ -4,9 +4,9 @@ export type ParalegalName = (typeof PARALEGALS)[number];
 
 // Dropbox folder mapping
 export const PARALEGAL_FOLDERS: Record<ParalegalName, string> = {
-  Dalia: '/Vinesh Patel/New Sort Folder/Dalia',
-  Vero: '/Vinesh Patel/New Sort Folder/Vero',
-  Madonna: '/Vinesh Patel/New Sort Folder/Madonna',
+  Dalia: '/New Sort Folder/Dalia',
+  Vero: '/New Sort Folder/Vero',
+  Madonna: '/New Sort Folder/Madonna',
 };
 
 // Event types from "Duplicate of Events 2.0" form
