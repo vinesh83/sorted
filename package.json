@@ -1,0 +1,19 @@
+{
+  "name": "doc-triage",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/server",
+    "packages/web",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w packages/server\" \"npm run dev -w packages/web\"",
+    "build": "npm run build -w shared && npm run build -w packages/web && npm run build -w packages/server",
+    "start": "node packages/server/dist/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.0"
+  }
+}
