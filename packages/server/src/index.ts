@@ -60,7 +60,10 @@ app.get('/api/status', (_req, res) => {
 app.post('/api/rescan', async (_req, res) => {
   try {
     await rescan();
-    res.json({ ok: true });
+    const db = getDb();
+    const fileCount = db.prepare('SELECT COUNT(*) as count FROM processed_files').get() as { count: number };
+    const docCount = db.prepare('SELECT COUNT(*) as count FROM documents').get() as { count: number };
+    res.json({ ok: true, processedFiles: fileCount.count, documents: docCount.count });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

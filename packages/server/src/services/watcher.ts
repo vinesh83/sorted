@@ -63,13 +63,17 @@ async function scanFolder(name: ParalegalName, folderPath: string): Promise<Drop
   try {
     if (existingCursor) {
       // Delta poll — only new/changed files
+      console.log(`[watcher] Delta poll for ${name} (${folderPath})`);
       const { entries, cursor } = await listFolderContinue(existingCursor);
       cursors.set(folderPath, cursor);
+      console.log(`[watcher] Delta poll for ${name}: ${entries.length} changes`);
       return entries;
     } else {
       // Initial scan — get everything
+      console.log(`[watcher] Initial scan for ${name} (${folderPath})`);
       const { entries, cursor } = await listFolder(folderPath);
       cursors.set(folderPath, cursor);
+      console.log(`[watcher] Initial scan for ${name}: ${entries.length} files found`);
       return entries;
     }
   } catch (err) {
