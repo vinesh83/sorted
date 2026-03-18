@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Document, AsanaProject, AsanaSection, EventType } from 'shared/types';
 import { EVENT_TYPES, EVENT_TYPE_TO_SECTION } from 'shared/types';
+import { api } from '../api/client';
 import { AsanaProjectSearch } from './AsanaProjectSearch';
 import { SectionPicker } from './SectionPicker';
 import { SplitSuggestion } from './SplitSuggestion';
@@ -25,7 +26,12 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
   const [selectedProject, setSelectedProject] = useState<AsanaProject | null>(null);
   const [selectedSection, setSelectedSection] = useState<AsanaSection | null>(null);
   const [approving, setApproving] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; taskUrl?: string; errors: string[] } | null>(null);
+  const [result, setResult] = useState<{
+    success: boolean; taskUrl?: string; errors: string[];
+    taskName?: string; projectName?: string; sectionName?: string;
+    eventType?: string; documentLabel?: string;
+    taskCreated?: boolean; sectionMoved?: boolean; fileAttached?: boolean;
+  } | null>(null);
 
   // Populate fields from document
   useEffect(() => {
@@ -99,6 +105,21 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
   // Suggested section based on event type
   const suggestedSectionName = eventType ? EVENT_TYPE_TO_SECTION[eventType as EventType] : null;
 
+  const [moving, setMoving] = useState(false);
+  const [moved, setMoved] = useState(false);
+
+  const handleMoveToSorted = async () => {
+    setMoving(true);
+    try {
+      await api.post(`/documents/${doc.id}/move-to-sorted`);
+      setMoved(true);
+    } catch {
+      // ignore
+    } finally {
+      setMoving(false);
+    }
+  };
+
   if (result) {
     return (
       <div style={styles.container}>
@@ -106,12 +127,46 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
           {result.success ? (
             <>
               <div style={styles.successIcon}>✓</div>
-              <h3 style={{ color: 'var(--color-success)' }}>Task Created</h3>
+              <h3 style={{ color: 'var(--color-success)', marginBottom: '12px' }}>Task Created</h3>
+
+              {/* Task details confirmation */}
+              <div style={styles.confirmDetails}>
+                {result.taskName && (
+                  <div style={styles.confirmRow}>
+                    <span style={styles.confirmLabel}>Task:</span>
+                    <span style={styles.confirmValue}>{result.taskName}</span>
+                  </div>
+                )}
+                {result.projectName && (
+                  <div style={styles.confirmRow}>
+                    <span style={styles.confirmLabel}>Project:</span>
+                    <span style={styles.confirmValue}>{result.projectName}</span>
+                  </div>
+                )}
+                {result.sectionName && (
+                  <div style={styles.confirmRow}>
+                    <span style={styles.confirmLabel}>Section:</span>
+                    <span style={styles.confirmValue}>{result.sectionName}</span>
+                  </div>
+                )}
+                {result.eventType && (
+                  <div style={styles.confirmRow}>
+                    <span style={styles.confirmLabel}>Event Type:</span>
+                    <span style={styles.confirmValue}>{result.eventType}</span>
+                  </div>
+                )}
+                <div style={styles.confirmRow}>
+                  <span style={styles.confirmLabel}>File attached:</span>
+                  <span style={styles.confirmValue}>{result.fileAttached ? 'Yes' : 'No'}</span>
+                </div>
+              </div>
+
               {result.taskUrl && (
                 <a href={result.taskUrl} target="_blank" rel="noopener noreferrer" style={styles.taskLink}>
                   Open in Asana
                 </a>
               )}
+
               {result.errors.length > 0 && (
                 <div style={{ marginTop: '8px', textAlign: 'center' as const }}>
                   {result.errors.map((e, i) => (
@@ -127,6 +182,19 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
                   )}
                 </div>
               )}
+
+              {/* Move to Sorted Folder */}
+              <div style={{ marginTop: '16px', textAlign: 'center' as const }}>
+                {moved ? (
+                  <span style={{ color: 'var(--color-success)', fontSize: '13px', fontWeight: 600 }}>
+                    Moved to Sorted folder
+                  </span>
+                ) : (
+                  <button onClick={handleMoveToSorted} disabled={moving} style={styles.moveBtn}>
+                    {moving ? 'Moving...' : 'Move to Sorted Folder'}
+                  </button>
+                )}
+              </div>
             </>
           ) : (
             <>
@@ -271,8 +339,8 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
 
       {/* Actions */}
       <div style={styles.actions}>
-        <button onClick={() => onSkip()} style={styles.skipButton}>
-          Skip
+        <button onClick={() => onNext()} style={styles.skipButton}>
+          Next
         </button>
         <button
           onClick={handleApprove}
@@ -319,4 +387,9 @@ const styles: Record<string, React.CSSProperties> = {
   taskLink: { color: 'var(--color-primary)', fontSize: '14px' },
   nextButton: { padding: '10px 24px', borderRadius: '6px', border: 'none', background: 'var(--color-primary)', color: '#fff', fontSize: '14px', fontWeight: 600, marginTop: '8px' },
   retryBtn: { display: 'inline-block', marginTop: '6px', padding: '4px 12px', borderRadius: '4px', border: '1px solid var(--color-primary)', background: '#fff', color: 'var(--color-primary)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
+  confirmDetails: { width: '100%', background: '#f8fafb', borderRadius: '8px', padding: '12px', marginBottom: '12px', textAlign: 'left' as const },
+  confirmRow: { display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '13px', borderBottom: '1px solid #eee' },
+  confirmLabel: { color: 'var(--color-text-secondary)', fontWeight: 500 },
+  confirmValue: { fontWeight: 600, textAlign: 'right' as const, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis' },
+  moveBtn: { padding: '8px 20px', borderRadius: '6px', border: '2px solid var(--color-success)', background: '#fff', color: 'var(--color-success)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },
 };

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { verifyToken } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
 import { createTask, moveTaskToSection, attachFile } from '../services/asana.js';
-import { downloadFile } from '../services/dropbox.js';
+import { downloadFile, moveFile } from '../services/dropbox.js';
 import { classifyDocument, logUsage } from '../services/classifier.js';
 import type { EventType, ApproveResult } from 'shared/types.js';
 
@@ -272,6 +272,24 @@ router.post('/:id/approve', async (req, res) => {
 
   result.success = result.taskCreated;
 
+  // Look up project name and section name for confirmation display
+  let projectName = '';
+  let sectionName = '';
+  try {
+    const projData = await (await fetch(`https://app.asana.com/api/1.0/projects/${projectGid}`, {
+      headers: { Authorization: `Bearer ${process.env.ASANA_PAT}` },
+    })).json() as { data?: { name?: string } };
+    projectName = projData.data?.name || '';
+  } catch {}
+  if (doc.asana_section_gid) {
+    try {
+      const secData = await (await fetch(`https://app.asana.com/api/1.0/sections/${doc.asana_section_gid}`, {
+        headers: { Authorization: `Bearer ${process.env.ASANA_PAT}` },
+      })).json() as { data?: { name?: string } };
+      sectionName = secData.data?.name || '';
+    } catch {}
+  }
+
   // Update document status
   const asanaError = result.errors.length > 0 ? result.errors.join('; ') : null;
   db.prepare(`
@@ -285,7 +303,16 @@ router.post('/:id/approve', async (req, res) => {
     WHERE id = ?
   `).run(paralegal, asanaError, id);
 
-  res.json({ result });
+  res.json({
+    result: {
+      ...result,
+      taskName,
+      projectName,
+      sectionName,
+      eventType,
+      documentLabel,
+    },
+  });
 });
 
 // POST /api/documents/:id/retry-classify
@@ -398,6 +425,46 @@ router.post('/:id/retry-attach', async (req, res) => {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[documents] Retry attach failed:', msg);
     res.status(500).json({ error: `Attachment failed: ${msg}` });
+  }
+});
+
+// POST /api/documents/:id/move-to-sorted — Move file to Sorted subfolder in Dropbox
+router.post('/:id/move-to-sorted', async (req, res) => {
+  const db = getDb();
+  const { id } = req.params;
+
+  const doc = db.prepare(`
+    SELECT pf.dropbox_path, pf.file_name, pf.paralegal_name
+    FROM documents d
+    JOIN processed_files pf ON d.processed_file_id = pf.id
+    WHERE d.id = ?
+  `).get(id) as {
+    dropbox_path: string;
+    file_name: string;
+    paralegal_name: string;
+  } | undefined;
+
+  if (!doc) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+
+  try {
+    // Build sorted folder path: parent folder + /Sorted/filename
+    const parentFolder = doc.dropbox_path.substring(0, doc.dropbox_path.lastIndexOf('/'));
+    const sortedPath = `${parentFolder}/Sorted/${doc.file_name}`;
+
+    await moveFile(doc.dropbox_path, sortedPath);
+
+    // Update the dropbox_path in the database
+    db.prepare('UPDATE processed_files SET dropbox_path = ? WHERE dropbox_path = ?')
+      .run(sortedPath, doc.dropbox_path);
+
+    res.json({ moved: true, newPath: sortedPath });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[documents] Move to sorted failed:', msg);
+    res.status(500).json({ error: `Move failed: ${msg}` });
   }
 });
 

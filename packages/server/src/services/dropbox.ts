@@ -190,6 +190,18 @@ export async function isConnected(): Promise<boolean> {
   }
 }
 
+export async function moveFile(fromPath: string, toPath: string): Promise<void> {
+  const res = await dropboxApi('/files/move_v2', {
+    from_path: fromPath,
+    to_path: toPath,
+    autorename: true,
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Dropbox move failed: ${err}`);
+  }
+}
+
 export function getParalegalFolders(): Array<{ name: ParalegalName; path: string }> {
   return (Object.entries(PARALEGAL_FOLDERS) as Array<[ParalegalName, string]>).map(
     ([name, path]) => ({ name, path }),
