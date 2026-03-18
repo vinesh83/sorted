@@ -184,11 +184,12 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
               )}
 
               {/* Move to Sorted Folder */}
-              <div style={{ marginTop: '16px', textAlign: 'center' as const }}>
+              <div style={styles.moveSection}>
                 {moved ? (
-                  <span style={{ color: 'var(--color-success)', fontSize: '13px', fontWeight: 600 }}>
-                    Moved to Sorted folder
-                  </span>
+                  <div style={styles.movedConfirm}>
+                    <span style={styles.movedIcon}>&#10003;</span>
+                    <span>File moved to <strong>Sorted</strong> folder</span>
+                  </div>
                 ) : (
                   <button onClick={handleMoveToSorted} disabled={moving} style={styles.moveBtn}>
                     {moving ? 'Moving...' : 'Move to Sorted Folder'}
@@ -391,5 +392,8 @@ const styles: Record<string, React.CSSProperties> = {
   confirmRow: { display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '13px', borderBottom: '1px solid #eee' },
   confirmLabel: { color: 'var(--color-text-secondary)', fontWeight: 500 },
   confirmValue: { fontWeight: 600, textAlign: 'right' as const, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis' },
-  moveBtn: { padding: '8px 20px', borderRadius: '6px', border: '2px solid var(--color-success)', background: '#fff', color: 'var(--color-success)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },
+  moveSection: { marginTop: '16px', textAlign: 'center' as const },
+  moveBtn: { padding: '10px 24px', borderRadius: '8px', border: '2px solid var(--color-success)', background: '#fff', color: 'var(--color-success)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
+  movedConfirm: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 16px', background: '#ecfdf5', borderRadius: '8px', color: 'var(--color-success)', fontSize: '14px', fontWeight: 500 },
+  movedIcon: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', background: 'var(--color-success)', color: '#fff', fontSize: '14px', fontWeight: 700 },
 };

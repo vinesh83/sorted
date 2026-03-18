@@ -7,9 +7,10 @@ interface Props {
   documents: Document[];
   selectedId: number | null;
   onSelect: (doc: Document) => void;
+  loading?: boolean;
 }
 
-export function DocumentQueue({ documents, selectedId, onSelect }: Props) {
+export function DocumentQueue({ documents, selectedId, onSelect, loading }: Props) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('oldest');
 
   const sorted = [...documents].sort((a, b) => {
@@ -17,6 +18,15 @@ export function DocumentQueue({ documents, selectedId, onSelect }: Props) {
     const dateB = new Date(b.created_at || 0).getTime();
     return sortOrder === 'oldest' ? dateA - dateB : dateB - dateA;
   });
+
+  if (loading && documents.length === 0) {
+    return (
+      <div style={styles.loadingState}>
+        <div style={styles.spinner} />
+        <p style={styles.loadingText}>Loading documents...</p>
+      </div>
+    );
+  }
 
   if (documents.length === 0) {
     return <div style={styles.empty}>No documents in queue</div>;
@@ -113,4 +123,11 @@ const styles: Record<string, React.CSSProperties> = {
   badge: { fontSize: '11px', fontWeight: 600, color: '#fff', padding: '2px 6px', borderRadius: '4px' },
   statusBadge: { fontSize: '11px', fontWeight: 500, textTransform: 'capitalize' },
   claimed: { fontSize: '11px', color: 'var(--color-warning)', fontStyle: 'italic' },
+  loadingState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px 20px', flex: 1 },
+  spinner: {
+    width: '32px', height: '32px', border: '3px solid var(--color-border)',
+    borderTopColor: 'var(--color-primary)', borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  loadingText: { color: 'var(--color-text-secondary)', fontSize: '13px' },
 };

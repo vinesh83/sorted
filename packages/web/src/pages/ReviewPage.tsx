@@ -81,6 +81,7 @@ export function ReviewPage() {
             documents={documents}
             selectedId={selectedId}
             onSelect={handleSelect}
+            loading={docsLoading}
           />
         </aside>
 
