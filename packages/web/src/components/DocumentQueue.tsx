@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import type { Document } from 'shared/types';
+
+type SortOrder = 'oldest' | 'newest';
 
 interface Props {
   documents: Document[];
@@ -7,38 +10,56 @@ interface Props {
 }
 
 export function DocumentQueue({ documents, selectedId, onSelect }: Props) {
+  const [sortOrder, setSortOrder] = useState<SortOrder>('oldest');
+
+  const sorted = [...documents].sort((a, b) => {
+    const dateA = new Date(a.created_at || 0).getTime();
+    const dateB = new Date(b.created_at || 0).getTime();
+    return sortOrder === 'oldest' ? dateA - dateB : dateB - dateA;
+  });
+
   if (documents.length === 0) {
     return <div style={styles.empty}>No documents in queue</div>;
   }
 
   return (
-    <div style={styles.list}>
-      {documents.map((doc) => (
+    <div style={styles.container}>
+      <div style={styles.sortRow}>
         <button
-          key={doc.id}
-          onClick={() => onSelect(doc)}
-          style={{
-            ...styles.item,
-            ...(doc.id === selectedId ? styles.itemActive : {}),
-          }}
+          onClick={() => setSortOrder(sortOrder === 'oldest' ? 'newest' : 'oldest')}
+          style={styles.sortBtn}
         >
-          <div style={styles.itemTop}>
-            <span style={styles.fileName}>{doc.file_name || `Document #${doc.id}`}</span>
-            <ConfidenceBadge confidence={doc.confidence} />
-          </div>
-          <div style={styles.itemBottom}>
-            {doc.document_label ? (
-              <span style={styles.label}>{doc.document_label}</span>
-            ) : (
-              <span style={styles.unclassified}>Unclassified</span>
-            )}
-            <StatusBadge status={doc.status} />
-          </div>
-          {doc.claimed_by && (
-            <div style={styles.claimed}>Reviewing: {doc.claimed_by}</div>
-          )}
+          {sortOrder === 'oldest' ? 'Oldest first' : 'Newest first'} ▾
         </button>
-      ))}
+      </div>
+      <div style={styles.list}>
+        {sorted.map((doc) => (
+          <button
+            key={doc.id}
+            onClick={() => onSelect(doc)}
+            style={{
+              ...styles.item,
+              ...(doc.id === selectedId ? styles.itemActive : {}),
+            }}
+          >
+            <div style={styles.itemTop}>
+              <span style={styles.fileName}>{doc.file_name || `Document #${doc.id}`}</span>
+              <ConfidenceBadge confidence={doc.confidence} />
+            </div>
+            <div style={styles.itemBottom}>
+              {doc.document_label ? (
+                <span style={styles.label}>{doc.document_label}</span>
+              ) : (
+                <span style={styles.unclassified}>Unclassified</span>
+              )}
+              <StatusBadge status={doc.status} />
+            </div>
+            {doc.claimed_by && (
+              <div style={styles.claimed}>Reviewing: {doc.claimed_by}</div>
+            )}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -69,7 +90,13 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  list: { display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto', flex: 1 },
+  container: { display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' },
+  sortRow: { padding: '6px 8px', borderBottom: '1px solid var(--color-border)' },
+  sortBtn: {
+    background: 'none', border: 'none', fontSize: '12px', color: 'var(--color-text-secondary)',
+    cursor: 'pointer', fontWeight: 500, padding: '2px 4px',
+  },
+  list: { display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto', flex: 1, padding: '4px 0' },
   empty: { padding: '24px', color: 'var(--color-text-secondary)', textAlign: 'center', fontSize: '14px' },
   item: {
     display: 'flex', flexDirection: 'column', gap: '4px',
