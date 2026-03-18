@@ -64,10 +64,10 @@ async function ensureRootNamespace(token: string): Promise<void> {
       const data = (await res.json()) as {
         root_info: { '.tag': string; root_namespace_id: string; home_namespace_id: string };
       };
-      // For team accounts, root_namespace_id differs from home_namespace_id
+      // For team accounts, use the home namespace so paths resolve relative to user's home
       if (data.root_info.root_namespace_id !== data.root_info.home_namespace_id) {
-        rootNamespaceId = data.root_info.root_namespace_id;
-        console.log('[dropbox] Team account detected, root namespace:', rootNamespaceId);
+        rootNamespaceId = data.root_info.home_namespace_id;
+        console.log('[dropbox] Team account detected, using home namespace:', rootNamespaceId);
       }
     }
   } catch {
