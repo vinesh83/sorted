@@ -85,10 +85,21 @@ async function doProcess(processedFileId: number): Promise<void> {
             fs.default.writeFileSync(tmpPdf, fileBuffer);
             try {
               execSync(`pdftoppm -jpeg -f 1 -l 1 -r 200 "${tmpPdf}" "${tmpImg}"`, { timeout: 15000 });
-              const jpegPath = `${tmpImg}-1.jpg`;
-              if (fs.default.existsSync(jpegPath)) {
+              // pdftoppm output varies: -1.jpg, -01.jpg, -001.jpg depending on page count
+              const possibleNames = [`${tmpImg}-1.jpg`, `${tmpImg}-01.jpg`, `${tmpImg}-001.jpg`];
+              const jpegPath = possibleNames.find((p) => fs.default.existsSync(p));
+              if (jpegPath) {
                 imageBuffer = fs.default.readFileSync(jpegPath);
                 fs.default.unlinkSync(jpegPath);
+              } else {
+                // Try finding any generated jpg
+                const tmpFiles = fs.default.readdirSync(tmpDir);
+                const match = tmpFiles.find((f: string) => f.startsWith(`doctriage-${processedFileId}`) && f.endsWith('.jpg'));
+                if (match) {
+                  const fullPath = path.default.join(tmpDir, match);
+                  imageBuffer = fs.default.readFileSync(fullPath);
+                  fs.default.unlinkSync(fullPath);
+                }
               }
             } catch {
               console.warn(`[pipeline] pdftoppm failed, skipping vision for PDF`);
