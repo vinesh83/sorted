@@ -93,6 +93,7 @@ export function ReviewPage() {
                 processedFileId={processedFileId}
                 mimeType={mimeType}
                 fileName={fileName}
+                documentId={selectedId}
               />
             </div>
             {/* Right: Classification panel */}
