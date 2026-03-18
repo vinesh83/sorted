@@ -2,6 +2,7 @@ import { getDb } from '../db/connection.js';
 import { downloadFile } from './dropbox.js';
 import { extractText } from './ocr.js';
 import { classifyDocument, classifyDocumentVision, logUsage } from './classifier.js';
+import { putCache } from './filecache.js';
 
 // Concurrency limit for processing
 const MAX_CONCURRENT = 3;
@@ -54,9 +55,10 @@ async function doProcess(processedFileId: number): Promise<void> {
   let ocrPartial = false;
 
   try {
-    // Step 1: Download file from Dropbox
+    // Step 1: Download file from Dropbox and cache locally
     const fileBuffer = await downloadFile(file.dropbox_path);
-    console.log(`[pipeline] Downloaded ${file.file_name} (${fileBuffer.length} bytes)`);
+    putCache(processedFileId, fileBuffer);
+    console.log(`[pipeline] Downloaded & cached ${file.file_name} (${fileBuffer.length} bytes)`);
 
     // Step 2: OCR / text extraction
     const ocrResult = await extractText(fileBuffer, file.mime_type || 'application/octet-stream', file.file_name);
