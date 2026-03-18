@@ -1,8 +1,23 @@
 import Tesseract from 'tesseract.js';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
 import mammoth from 'mammoth';
+
+// pdf-parse has ESM compatibility issues — lazy load to handle both tsx and compiled contexts
+let _pdfParse: ((buffer: Buffer, options?: Record<string, unknown>) => Promise<{ text: string; numpages: number }>) | null = null;
+
+async function getPdfParse() {
+  if (_pdfParse) return _pdfParse;
+  try {
+    // Try ESM dynamic import first (works in compiled output)
+    const mod = await import('pdf-parse');
+    _pdfParse = (mod as any).default || mod;
+  } catch {
+    // Fallback to createRequire for tsx/dev mode
+    const { createRequire } = await import('module');
+    const req = createRequire(import.meta.url);
+    _pdfParse = req('pdf-parse');
+  }
+  return _pdfParse!;
+}
 
 const MAX_PAGES_OCR = 20;
 const MIN_CHARS_PER_PAGE = 50;
@@ -33,6 +48,8 @@ export async function extractText(
 
 async function extractFromPdf(buffer: Buffer): Promise<OcrResult> {
   try {
+    // Lazy-load pdf-parse
+    const pdfParse = await getPdfParse();
     // Try text extraction first (text-based PDFs)
     const parsed = await pdfParse(buffer, { max: MAX_PAGES_OCR });
     const pageCount = parsed.numpages;
@@ -51,13 +68,12 @@ async function extractFromPdf(buffer: Buffer): Promise<OcrResult> {
       return { text, partial: pageCount > MAX_PAGES_OCR };
     }
 
-    // No text at all — try Tesseract on the raw buffer
-    // Note: Tesseract.js can handle PDFs directly in some cases
-    console.log('[ocr] PDF has no text layer, attempting Tesseract OCR...');
-    return await ocrWithTesseract(buffer);
+    // No text at all — scanned PDF. Tesseract.js can't read PDFs directly (needs images).
+    console.log('[ocr] PDF has no text layer — scanned document, cannot OCR without image conversion');
+    return { text: '', partial: false };
   } catch (err) {
-    console.error('[ocr] PDF extraction failed, trying Tesseract:', err);
-    return await ocrWithTesseract(buffer);
+    console.error('[ocr] PDF extraction failed:', err);
+    return { text: '', partial: false };
   }
 }
 

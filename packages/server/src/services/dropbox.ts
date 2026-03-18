@@ -52,32 +52,14 @@ async function getAccessToken(): Promise<string> {
   throw new Error('No Dropbox credentials configured');
 }
 
-/** Detect root namespace for team Dropbox accounts (needed to access full paths) */
-async function ensureRootNamespace(token: string): Promise<void> {
-  if (rootNamespaceId) return;
-  try {
-    const res = await fetch(`${DROPBOX_API}/users/get_current_account`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const data = (await res.json()) as {
-        root_info: { '.tag': string; root_namespace_id: string; home_namespace_id: string };
-      };
-      // For team accounts, use the home namespace so paths resolve relative to user's home
-      if (data.root_info.root_namespace_id !== data.root_info.home_namespace_id) {
-        rootNamespaceId = data.root_info.home_namespace_id;
-        console.log('[dropbox] Team account detected, using home namespace:', rootNamespaceId);
-      }
-    }
-  } catch {
-    // Non-critical, continue without namespace header
-  }
+/** For team accounts, we skip setting the path root header entirely.
+ *  Without it, the API defaults to the user's home namespace, which is what we want. */
+async function ensureRootNamespace(_token: string): Promise<void> {
+  // No-op: let Dropbox default to the authenticated user's home namespace
 }
 
 function getPathRootHeader(): Record<string, string> {
-  if (!rootNamespaceId) return {};
-  return { 'Dropbox-API-Path-Root': JSON.stringify({ '.tag': 'root', 'root': rootNamespaceId }) };
+  return {};
 }
 
 async function dropboxApi(endpoint: string, body?: unknown): Promise<Response> {
