@@ -21,7 +21,9 @@ export function DocumentViewer({ processedFileId, mimeType, fileName, documentId
     );
   }
 
-  const fileUrl = `/api/files/${processedFileId}/content`;
+  // Append JWT token as query param for iframe/img requests that can't send headers
+  const token = localStorage.getItem('token') || '';
+  const fileUrl = `/api/files/${processedFileId}/content?token=${encodeURIComponent(token)}`;
 
   const loadExtractedText = async () => {
     if (extractedText !== null || !documentId) return;
@@ -92,7 +94,7 @@ export function DocumentViewer({ processedFileId, mimeType, fileName, documentId
   const isDocx = fileName?.toLowerCase().endsWith('.docx') || fileName?.toLowerCase().endsWith('.doc');
 
   if (isDocx) {
-    const previewUrl = `/api/files/${processedFileId}/preview`;
+    const previewUrl = `/api/files/${processedFileId}/preview?token=${encodeURIComponent(token)}`;
     return (
       <div style={styles.container}>
         {textToggle}
