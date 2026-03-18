@@ -188,7 +188,7 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
                 {moved ? (
                   <div style={styles.movedConfirm}>
                     <span style={styles.movedIcon}>&#10003;</span>
-                    <span>Moved to <strong>New Sort Folder / Sorted</strong></span>
+                    <span>Moved to your <strong>Sorted</strong> folder</span>
                   </div>
                 ) : (
                   <button onClick={handleMoveToSorted} disabled={moving} style={styles.moveBtn}>
@@ -196,7 +196,7 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
                   </button>
                 )}
                 {!moved && !moving && (
-                  <p style={styles.moveHint}>Moves file from paralegal's queue to /New Sort Folder/Sorted/</p>
+                  <p style={styles.moveHint}>Moves file to your Sorted subfolder in Dropbox</p>
                 )}
               </div>
             </>

@@ -76,7 +76,7 @@ export function ReviewPage() {
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={styles.headerLeft}>
-          <a href="/" style={styles.logoLink}><h1 style={styles.logo}>Doc Triage</h1></a>
+          <a href="/select" style={styles.logoLink}><h1 style={styles.logo}>Doc Triage</h1></a>
           <select
             value={paralegal || ''}
             onChange={(e) => { setSelectedId(null); selectParalegal(e.target.value as ParalegalName); }}
@@ -85,12 +85,12 @@ export function ReviewPage() {
             {PARALEGALS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <span style={styles.count}>
-            {docsLoading && documents.length === 0 ? 'Loading...' : `${pendingCount} pending`}
+            {docsLoading && documents.length === 0 ? 'Loading documents...' : `${pendingCount} to review`}
           </span>
           {processingCount > 0 && (
             <span style={styles.processingBadge}>
               <span style={styles.processingDot} />
-              {processingCount} classifying...
+              New files processing...
             </span>
           )}
         </div>
