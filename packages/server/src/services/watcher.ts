@@ -162,6 +162,12 @@ export async function startWatcher() {
   setTimeout(poll, POLL_INTERVAL);
 }
 
+export async function rescan() {
+  console.log('[watcher] Manual rescan triggered — clearing cursors');
+  cursors.clear();
+  await pollOnce();
+}
+
 export function stopWatcher() {
   watcherRunning = false;
   console.log('[watcher] Stopped');

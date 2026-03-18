@@ -10,7 +10,7 @@ import { documentsRouter } from './routes/documents.js';
 import { asanaRouter } from './routes/asana.js';
 import { filesRouter } from './routes/files.js';
 import { splitsRouter } from './routes/splits.js';
-import { startWatcher, getWatcherStatus, setOnNewFile } from './services/watcher.js';
+import { startWatcher, getWatcherStatus, setOnNewFile, rescan } from './services/watcher.js';
 import { processFile } from './services/pipeline.js';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -43,14 +43,27 @@ app.get('/api/status', (_req, res) => {
     FROM documents
   `).get() as { pendingCount: number; approvedCount: number };
 
+  const fileCount = db.prepare('SELECT COUNT(*) as count FROM processed_files').get() as { count: number };
+
   res.json({
     watcherRunning,
     dropboxConnected,
     processingCount,
     pendingCount: counts.pendingCount,
     approvedCount: counts.approvedCount,
+    processedFiles: fileCount.count,
     timestamp: new Date().toISOString(),
   });
+});
+
+// Manual rescan — forces re-reading all folders from scratch
+app.post('/api/rescan', async (_req, res) => {
+  try {
+    await rescan();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // Usage endpoint
