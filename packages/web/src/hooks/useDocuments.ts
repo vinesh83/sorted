@@ -10,7 +10,8 @@ export function useDocuments(paralegal: string | null, status: string = 'pending
   const refresh = useCallback(async () => {
     if (!paralegal) return;
     try {
-      setLoading(true);
+      // Only show loading spinner on initial load, not on polling refreshes
+      if (documents.length === 0) setLoading(true);
       const res = await api.get<{ documents: Document[] }>(
         `/documents?paralegal=${paralegal}&status=${status}`,
       );
@@ -21,7 +22,7 @@ export function useDocuments(paralegal: string | null, status: string = 'pending
     } finally {
       setLoading(false);
     }
-  }, [paralegal, status]);
+  }, [paralegal, status, documents.length]);
 
   useEffect(() => {
     refresh();

@@ -68,9 +68,9 @@ async function extractFromPdf(buffer: Buffer): Promise<OcrResult> {
       return { text, partial: pageCount > MAX_PAGES_OCR };
     }
 
-    // No text at all — scanned PDF. Tesseract.js can't read PDFs directly (needs images).
-    console.log('[ocr] PDF has no text layer — scanned document, cannot OCR without image conversion');
-    return { text: '', partial: false };
+    // No text at all — scanned PDF. Convert pages to images via pdftoppm and OCR each.
+    console.log('[ocr] PDF has no text layer — converting to images for OCR');
+    return await ocrScannedPdf(buffer, pageCount);
   } catch (err) {
     console.error('[ocr] PDF extraction failed:', err);
     return { text: '', partial: false };
@@ -89,6 +89,50 @@ async function extractFromDocx(buffer: Buffer): Promise<OcrResult> {
     console.error('[ocr] DOCX extraction failed:', err);
     return { text: '', partial: false };
   }
+}
+
+async function ocrScannedPdf(buffer: Buffer, pageCount: number): Promise<OcrResult> {
+  const { execSync } = await import('child_process');
+  const fs = await import('fs');
+  const os = await import('os');
+  const path = await import('path');
+
+  const tmpDir = os.default.tmpdir();
+  const id = `ocr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const tmpPdf = path.default.join(tmpDir, `${id}.pdf`);
+  const tmpPrefix = path.default.join(tmpDir, id);
+
+  fs.default.writeFileSync(tmpPdf, buffer);
+
+  const pagesToOcr = Math.min(pageCount, MAX_PAGES_OCR);
+  let allText = '';
+  const partial = pageCount > MAX_PAGES_OCR;
+
+  try {
+    // Convert pages to JPEG images
+    execSync(`pdftoppm -jpeg -r 200 -f 1 -l ${pagesToOcr} "${tmpPdf}" "${tmpPrefix}"`, { timeout: 60000 });
+
+    // Find generated images and OCR each
+    const files = fs.default.readdirSync(tmpDir)
+      .filter((f: string) => f.startsWith(id) && f.endsWith('.jpg'))
+      .sort();
+
+    for (const imgFile of files) {
+      const imgPath = path.default.join(tmpDir, imgFile);
+      const imgBuffer = fs.default.readFileSync(imgPath);
+      const result = await ocrWithTesseract(imgBuffer);
+      allText += result.text + '\n';
+      fs.default.unlinkSync(imgPath);
+    }
+
+    console.log(`[ocr] Scanned PDF OCR: ${allText.length} chars from ${files.length} pages`);
+  } catch (err) {
+    console.error('[ocr] pdftoppm/OCR failed:', err);
+  } finally {
+    try { fs.default.unlinkSync(tmpPdf); } catch {}
+  }
+
+  return { text: allText.trim(), partial };
 }
 
 async function ocrWithTesseract(buffer: Buffer): Promise<OcrResult> {

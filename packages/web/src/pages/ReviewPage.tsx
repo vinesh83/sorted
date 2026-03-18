@@ -9,7 +9,7 @@ import { PARALEGALS, type Document, type ParalegalName } from 'shared/types';
 
 export function ReviewPage() {
   const { paralegal, selectParalegal, logout } = useAuth();
-  const { documents, refresh } = useDocuments(paralegal, 'pending');
+  const { documents, loading: docsLoading, refresh } = useDocuments(paralegal, 'pending');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const { document: selectedDoc, updateField, claim, skip, approve, retryClassify, retryAttach } = useDocument(selectedId);
 
@@ -66,7 +66,7 @@ export function ReviewPage() {
           >
             {PARALEGALS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <span style={styles.count}>{pendingCount} pending</span>
+          <span style={styles.count}>{docsLoading ? 'Loading...' : `${pendingCount} pending`}</span>
         </div>
         <div style={styles.headerRight}>
           <a href="/history" style={styles.link}>History</a>
