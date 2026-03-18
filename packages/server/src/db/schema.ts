@@ -65,6 +65,17 @@ export function initDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS corrections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id INTEGER NOT NULL REFERENCES documents(id),
+      field_name TEXT NOT NULL,
+      ai_value TEXT,
+      paralegal_value TEXT,
+      paralegal_name TEXT,
+      file_name TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS split_suggestions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       processed_file_id INTEGER NOT NULL REFERENCES processed_files(id),

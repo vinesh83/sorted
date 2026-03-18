@@ -163,7 +163,9 @@ router.post('/:id/approve', async (req, res) => {
   `).get(id) as {
     id: number;
     document_label: string | null;
+    client_name: string | null;
     edited_label: string | null;
+    edited_client_name: string | null;
     description: string | null;
     edited_description: string | null;
     event_type: string | null;
@@ -295,6 +297,31 @@ router.post('/:id/approve', async (req, res) => {
       })).json() as { data?: { name?: string } };
       sectionName = secData.data?.name || '';
     } catch {}
+  }
+
+  // Log corrections silently — compare AI suggestion vs what paralegal approved
+  const corrections: Array<{ field: string; ai: string | null; human: string | null }> = [];
+  if (doc.edited_label && doc.edited_label !== doc.document_label) {
+    corrections.push({ field: 'document_label', ai: doc.document_label, human: doc.edited_label });
+  }
+  if (doc.edited_client_name && doc.edited_client_name !== doc.client_name) {
+    corrections.push({ field: 'client_name', ai: doc.client_name, human: doc.edited_client_name });
+  }
+  if (doc.edited_description && doc.edited_description !== doc.description) {
+    corrections.push({ field: 'description', ai: doc.description, human: doc.edited_description });
+  }
+  if (doc.edited_event_type && doc.edited_event_type !== doc.event_type) {
+    corrections.push({ field: 'event_type', ai: doc.event_type, human: doc.edited_event_type });
+  }
+  if (doc.edited_date && doc.edited_date !== doc.document_date) {
+    corrections.push({ field: 'document_date', ai: doc.document_date, human: doc.edited_date });
+  }
+  const insertCorrection = db.prepare(`
+    INSERT INTO corrections (document_id, field_name, ai_value, paralegal_value, paralegal_name, file_name)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  for (const c of corrections) {
+    insertCorrection.run(Number(id), c.field, c.ai, c.human, paralegal, doc.file_name);
   }
 
   // Update document status

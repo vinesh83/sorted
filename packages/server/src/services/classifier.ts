@@ -56,7 +56,7 @@ export async function classifyDocument(
 ): Promise<{ classification: ClassificationResult; inputTokens: number; outputTokens: number }> {
   const anthropic = getClient();
 
-  const userMessage = `File name: ${fileName}\n\nExtracted text:\n${extractedText.slice(0, 8000)}`;
+  const userMessage = `File name: ${fileName}\n\nExtracted text:\n${extractedText.slice(0, 16000)}`;
 
   const response = await anthropic.messages.create({
     model: MODEL,

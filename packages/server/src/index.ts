@@ -101,6 +101,29 @@ app.post('/api/reprocess', verifyToken, async (_req, res) => {
   }
 });
 
+// Corrections endpoint — view paralegal corrections for prompt improvement
+app.get('/api/corrections', verifyToken, (_req, res) => {
+  const db = getDb();
+  const corrections = db.prepare(`
+    SELECT c.*, d.document_label as ai_doc_label, d.extracted_text
+    FROM corrections c
+    LEFT JOIN documents d ON c.document_id = d.id
+    ORDER BY c.created_at DESC
+    LIMIT 200
+  `).all();
+
+  // Summary stats
+  const summary = db.prepare(`
+    SELECT field_name, COUNT(*) as count,
+           GROUP_CONCAT(DISTINCT ai_value || ' → ' || paralegal_value, ' | ') as examples
+    FROM corrections
+    GROUP BY field_name
+    ORDER BY count DESC
+  `).all();
+
+  res.json({ corrections, summary });
+});
+
 // Usage endpoint
 app.get('/api/usage', (_req, res) => {
   const db = getDb();
