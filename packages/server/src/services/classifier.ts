@@ -47,6 +47,9 @@ const SYSTEM_PROMPT = `You are a document classifier for an immigration law firm
 
 Respond with ONLY valid JSON, no markdown or explanation outside the JSON.`;
 
+/**
+ * Classify a document using extracted text.
+ */
 export async function classifyDocument(
   extractedText: string,
   fileName: string,
@@ -88,6 +91,72 @@ export async function classifyDocument(
   // Validate eventType
   if (!EVENT_TYPES.includes(classification.eventType as EventType)) {
     console.warn(`[classifier] Invalid eventType "${classification.eventType}", defaulting to "Received"`);
+    classification.eventType = 'Received';
+  }
+
+  return { classification, inputTokens, outputTokens };
+}
+
+/**
+ * Classify a document using vision (image of the document).
+ * Used as fallback when OCR fails or returns no text.
+ */
+export async function classifyDocumentVision(
+  imageBuffer: Buffer,
+  mimeType: string,
+  fileName: string,
+): Promise<{ classification: ClassificationResult; inputTokens: number; outputTokens: number }> {
+  const anthropic = getClient();
+
+  // Convert buffer to base64
+  const base64 = imageBuffer.toString('base64');
+  const mediaType = (
+    mimeType === 'image/png' ? 'image/png' :
+    mimeType === 'image/gif' ? 'image/gif' :
+    mimeType === 'image/webp' ? 'image/webp' :
+    'image/jpeg'
+  ) as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
+  const response = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    system: SYSTEM_PROMPT,
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: mediaType, data: base64 },
+        },
+        {
+          type: 'text',
+          text: `File name: ${fileName}\n\nPlease classify this document image. The OCR failed so you are looking at the raw image. Extract what you can see and classify it.`,
+        },
+      ],
+    }],
+  });
+
+  const inputTokens = response.usage.input_tokens;
+  const outputTokens = response.usage.output_tokens;
+
+  const content = response.content[0];
+  if (content.type !== 'text') {
+    throw new Error('Unexpected response type from Claude');
+  }
+
+  let classification: ClassificationResult;
+  try {
+    let jsonStr = content.text.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    }
+    classification = JSON.parse(jsonStr);
+  } catch (err) {
+    console.error('[classifier] Failed to parse vision response:', content.text);
+    throw new Error(`Vision classification response was not valid JSON: ${err}`);
+  }
+
+  if (!EVENT_TYPES.includes(classification.eventType as EventType)) {
     classification.eventType = 'Received';
   }
 
