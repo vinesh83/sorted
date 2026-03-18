@@ -32,6 +32,9 @@ router.get('/', (req, res) => {
   if (status && status !== 'all') {
     if (status === 'history') {
       sql += " AND d.status IN ('approved', 'skipped')";
+    } else if (status === 'pending') {
+      // Show both pending (classified) and unclassified (OCR/classify failed) docs
+      sql += " AND d.status IN ('pending', 'unclassified')";
     } else {
       sql += ' AND d.status = ?';
       params.push(status);
