@@ -22,7 +22,7 @@ export function DocumentViewer({ processedFileId, mimeType, fileName, documentId
   }
 
   // Append JWT token as query param for iframe/img requests that can't send headers
-  const token = localStorage.getItem('token') || '';
+  const token = localStorage.getItem('doc-triage-token') || '';
   const fileUrl = `/api/files/${processedFileId}/content?token=${encodeURIComponent(token)}`;
 
   const loadExtractedText = async () => {

@@ -130,7 +130,18 @@ app.get('/api/usage', (_req, res) => {
 // Serve static frontend in production
 if (process.env.NODE_ENV === 'production') {
   const webDist = path.resolve(__dirname, '../../web/dist');
-  app.use(express.static(webDist));
+  app.use(express.static(webDist, {
+    etag: true,
+    maxAge: 0,
+    setHeaders: (res, filePath) => {
+      // Cache JS/CSS with hashed filenames for 1 year, everything else no-cache
+      if (filePath.match(/\.[a-f0-9]{8}\./)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(webDist, 'index.html'));
   });
