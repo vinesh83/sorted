@@ -188,12 +188,15 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
                 {moved ? (
                   <div style={styles.movedConfirm}>
                     <span style={styles.movedIcon}>&#10003;</span>
-                    <span>File moved to <strong>Sorted</strong> folder</span>
+                    <span>Moved to <strong>New Sort Folder / Sorted</strong></span>
                   </div>
                 ) : (
                   <button onClick={handleMoveToSorted} disabled={moving} style={styles.moveBtn}>
-                    {moving ? 'Moving...' : 'Move to Sorted Folder'}
+                    {moving ? 'Moving file...' : 'Move to Sorted Folder'}
                   </button>
+                )}
+                {!moved && !moving && (
+                  <p style={styles.moveHint}>Moves file from paralegal's queue to /New Sort Folder/Sorted/</p>
                 )}
               </div>
             </>
@@ -353,8 +356,8 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
         <button onClick={() => onNext()} style={styles.skipButton}>
           Next
         </button>
-        <button onClick={handleMoveToSorted} disabled={moving || moved} style={styles.sortedSmallBtn}>
-          {moved ? 'Sorted' : moving ? '...' : 'Move to Sorted'}
+        <button onClick={handleMoveToSorted} disabled={moving || moved} style={styles.sortedSmallBtn} title="Move file to /New Sort Folder/Sorted/">
+          {moved ? 'Moved' : moving ? 'Moving...' : 'Move to Sorted'}
         </button>
         <button
           onClick={handleApprove}
@@ -410,4 +413,5 @@ const styles: Record<string, React.CSSProperties> = {
   moveBtn: { padding: '10px 24px', borderRadius: '8px', border: '2px solid var(--color-success)', background: '#fff', color: 'var(--color-success)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
   movedConfirm: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 16px', background: '#ecfdf5', borderRadius: '8px', color: 'var(--color-success)', fontSize: '14px', fontWeight: 500 },
   movedIcon: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', background: 'var(--color-success)', color: '#fff', fontSize: '14px', fontWeight: 700 },
+  moveHint: { fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '4px' },
 };

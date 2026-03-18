@@ -450,9 +450,8 @@ router.post('/:id/move-to-sorted', async (req, res) => {
   }
 
   try {
-    // Build sorted folder path: parent folder + /Sorted/filename
-    const parentFolder = doc.dropbox_path.substring(0, doc.dropbox_path.lastIndexOf('/'));
-    const sortedPath = `${parentFolder}/Sorted/${doc.file_name}`;
+    // Move to shared Sorted folder at /New Sort Folder/Sorted/filename
+    const sortedPath = `/New Sort Folder/Sorted/${doc.file_name}`;
 
     await moveFile(doc.dropbox_path, sortedPath);
 
