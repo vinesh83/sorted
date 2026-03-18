@@ -5,10 +5,10 @@ import { api } from '../api/client';
 import { DocumentQueue } from '../components/DocumentQueue';
 import { DocumentViewer } from '../components/DocumentViewer';
 import { ClassificationPanel } from '../components/ClassificationPanel';
-import type { Document } from 'shared/types';
+import { PARALEGALS, type Document, type ParalegalName } from 'shared/types';
 
 export function ReviewPage() {
-  const { paralegal, logout } = useAuth();
+  const { paralegal, selectParalegal, logout } = useAuth();
   const { documents, refresh } = useDocuments(paralegal, 'pending');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const { document: selectedDoc, updateField, claim, skip, approve, retryClassify, retryAttach } = useDocument(selectedId);
@@ -59,7 +59,13 @@ export function ReviewPage() {
       <header style={styles.header}>
         <div style={styles.headerLeft}>
           <h1 style={styles.logo}>Doc Triage</h1>
-          <span style={styles.badge}>{paralegal}</span>
+          <select
+            value={paralegal || ''}
+            onChange={(e) => { setSelectedId(null); selectParalegal(e.target.value as ParalegalName); }}
+            style={styles.paralegalSelect}
+          >
+            {PARALEGALS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
           <span style={styles.count}>{pendingCount} pending</span>
         </div>
         <div style={styles.headerRight}>
@@ -135,6 +141,11 @@ const styles: Record<string, React.CSSProperties> = {
   badge: {
     padding: '3px 10px', borderRadius: '999px', background: 'var(--color-primary)',
     color: '#fff', fontSize: '12px', fontWeight: 600,
+  },
+  paralegalSelect: {
+    padding: '4px 8px', borderRadius: '6px', border: '2px solid var(--color-primary)',
+    background: 'var(--color-primary)', color: '#fff', fontSize: '13px', fontWeight: 600,
+    cursor: 'pointer',
   },
   count: { color: 'var(--color-text-secondary)', fontSize: '13px' },
   link: { color: 'var(--color-primary)', fontSize: '13px', textDecoration: 'none' },

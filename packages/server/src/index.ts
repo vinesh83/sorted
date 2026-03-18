@@ -69,6 +69,37 @@ app.post('/api/rescan', async (_req, res) => {
   }
 });
 
+// Bulk reprocess — re-runs OCR + classification on all unclassified documents
+app.post('/api/reprocess', async (_req, res) => {
+  try {
+    const db = getDb();
+    const unclassified = db.prepare(`
+      SELECT d.id, d.processed_file_id
+      FROM documents d
+      WHERE d.status = 'unclassified'
+    `).all() as Array<{ id: number; processed_file_id: number }>;
+
+    // Delete the unclassified document records so the pipeline can recreate them
+    for (const doc of unclassified) {
+      db.prepare('DELETE FROM documents WHERE id = ?').run(doc.id);
+    }
+
+    // Get unique processed_file_ids and reset their status to 'pending'
+    const fileIds = [...new Set(unclassified.map((d) => d.processed_file_id))];
+    for (const fid of fileIds) {
+      db.prepare("UPDATE processed_files SET status = 'pending' WHERE id = ?").run(fid);
+      // Re-trigger pipeline
+      processFile(fid).catch((err) => {
+        console.error(`[reprocess] Error for file ${fid}:`, err);
+      });
+    }
+
+    res.json({ ok: true, reprocessing: fileIds.length });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // Usage endpoint
 app.get('/api/usage', (_req, res) => {
   const db = getDb();
