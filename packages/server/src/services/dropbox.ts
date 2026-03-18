@@ -190,7 +190,26 @@ export async function isConnected(): Promise<boolean> {
   }
 }
 
+export async function createFolder(path: string): Promise<void> {
+  const res = await dropboxApi('/files/create_folder_v2', {
+    path,
+    autorename: false,
+  });
+  // Ignore "folder already exists" error (409 conflict)
+  if (!res.ok && res.status !== 409) {
+    const body = await res.text();
+    // Also ignore path/conflict errors (folder exists)
+    if (!body.includes('conflict')) {
+      throw new Error(`Dropbox create folder failed: ${body}`);
+    }
+  }
+}
+
 export async function moveFile(fromPath: string, toPath: string): Promise<void> {
+  // Ensure destination folder exists
+  const destFolder = toPath.substring(0, toPath.lastIndexOf('/'));
+  await createFolder(destFolder);
+
   const res = await dropboxApi('/files/move_v2', {
     from_path: fromPath,
     to_path: toPath,
