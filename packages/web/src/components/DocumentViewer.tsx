@@ -88,28 +88,19 @@ export function DocumentViewer({ processedFileId, mimeType, fileName, documentId
     );
   }
 
-  // DOCX and other files — use Office Online viewer via public URL,
-  // or fall back to showing extracted text + download link
+  // DOCX files — convert to HTML on server and render in iframe
   const isDocx = fileName?.toLowerCase().endsWith('.docx') || fileName?.toLowerCase().endsWith('.doc');
 
   if (isDocx) {
-    // Use Microsoft Office Online viewer (works with public URLs)
-    // Since our file URL requires auth, we show extracted text by default with download option
+    const previewUrl = `/api/files/${processedFileId}/preview`;
     return (
       <div style={styles.container}>
         {textToggle}
-        <div style={styles.docxView}>
-          <p style={styles.fileName}>{fileName}</p>
-          <p style={styles.note}>Word documents can't be previewed in the browser.</p>
-          <div style={styles.docxActions}>
-            <a href={fileUrl} target="_blank" rel="noopener noreferrer" style={styles.downloadBtn}>
-              Download File
-            </a>
-            <button onClick={() => { setShowText(true); loadExtractedText(); }} style={styles.viewTextBtn}>
-              View Extracted Text
-            </button>
-          </div>
-        </div>
+        <iframe
+          src={previewUrl}
+          title={fileName || 'Document'}
+          style={{ ...styles.iframe, background: '#fff' }}
+        />
       </div>
     );
   }
