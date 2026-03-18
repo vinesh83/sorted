@@ -7,13 +7,16 @@ import type { Document } from 'shared/types';
 export function HistoryPage() {
   const { paralegal, logout } = useAuth();
   const { documents, loading } = useDocuments(paralegal, 'history');
-  const [showUsage, setShowUsage] = useState(false);
+  const [showUsage, setShowUsage] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') === 'usage';
+  });
 
   return (
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={styles.headerLeft}>
-          <h1 style={styles.logo}>Doc Triage</h1>
+          <a href="/" style={{ textDecoration: 'none', color: 'inherit' }}><h1 style={styles.logo}>Doc Triage</h1></a>
           <span style={styles.badge}>{paralegal}</span>
         </div>
         <div style={styles.headerRight}>

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useDocuments, useDocument } from '../hooks/useDocuments';
 import { api } from '../api/client';
@@ -7,11 +7,29 @@ import { DocumentViewer } from '../components/DocumentViewer';
 import { ClassificationPanel } from '../components/ClassificationPanel';
 import { PARALEGALS, type Document, type ParalegalName } from 'shared/types';
 
+function useServerStatus() {
+  const [processingCount, setProcessingCount] = useState(0);
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json() as { processingCount: number };
+        setProcessingCount(data.processingCount);
+      } catch {}
+    };
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
+  }, []);
+  return { processingCount };
+}
+
 export function ReviewPage() {
   const { paralegal, selectParalegal, logout } = useAuth();
   const { documents, loading: docsLoading, refresh } = useDocuments(paralegal, 'pending');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const { document: selectedDoc, updateField, claim, skip, approve, retryClassify, retryAttach } = useDocument(selectedId);
+  const { processingCount } = useServerStatus();
 
   // Find the processed_file_id for the selected document
   const processedFileId = selectedDoc?.processed_file_id ?? null;
@@ -58,7 +76,7 @@ export function ReviewPage() {
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={styles.headerLeft}>
-          <h1 style={styles.logo}>Doc Triage</h1>
+          <a href="/" style={styles.logoLink}><h1 style={styles.logo}>Doc Triage</h1></a>
           <select
             value={paralegal || ''}
             onChange={(e) => { setSelectedId(null); selectParalegal(e.target.value as ParalegalName); }}
@@ -66,10 +84,19 @@ export function ReviewPage() {
           >
             {PARALEGALS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <span style={styles.count}>{docsLoading ? 'Loading...' : `${pendingCount} pending`}</span>
+          <span style={styles.count}>
+            {docsLoading && documents.length === 0 ? 'Loading...' : `${pendingCount} pending`}
+          </span>
+          {processingCount > 0 && (
+            <span style={styles.processingBadge}>
+              <span style={styles.processingDot} />
+              {processingCount} classifying...
+            </span>
+          )}
         </div>
         <div style={styles.headerRight}>
           <a href="/history" style={styles.link}>History</a>
+          <a href="/history?tab=usage" style={styles.link}>API Usage</a>
           <button onClick={logout} style={styles.logoutBtn}>Sign out</button>
         </div>
       </header>
@@ -139,7 +166,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   headerLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
   headerRight: { display: 'flex', alignItems: 'center', gap: '12px' },
-  logo: { fontSize: '18px', fontWeight: 700 },
+  logo: { fontSize: '18px', fontWeight: 700, margin: 0 },
+  logoLink: { textDecoration: 'none', color: 'inherit' },
   badge: {
     padding: '3px 10px', borderRadius: '999px', background: 'var(--color-primary)',
     color: '#fff', fontSize: '12px', fontWeight: 600,
@@ -150,6 +178,15 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   count: { color: 'var(--color-text-secondary)', fontSize: '13px' },
+  processingBadge: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '3px 10px', borderRadius: '999px', background: '#fef3c7',
+    color: '#92400e', fontSize: '12px', fontWeight: 500,
+  },
+  processingDot: {
+    width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b',
+    animation: 'pulse 1.5s ease-in-out infinite',
+  },
   link: { color: 'var(--color-primary)', fontSize: '13px', textDecoration: 'none' },
   logoutBtn: {
     background: 'none', border: '1px solid var(--color-border)',

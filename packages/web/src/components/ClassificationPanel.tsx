@@ -318,8 +318,18 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
       </div>
 
       {/* Asana targeting */}
-      <div style={styles.section}>
-        <h4 style={styles.sectionTitle}>Asana Project</h4>
+      <div style={{
+        ...styles.section,
+        ...(!selectedProject ? { background: '#fef3c7', border: '2px solid #f59e0b', borderRadius: '8px', padding: '12px' } : {}),
+      }}>
+        <h4 style={styles.sectionTitle}>
+          {selectedProject ? 'Asana Project' : 'Select Asana Project (Required)'}
+        </h4>
+        {!selectedProject && (
+          <p style={{ fontSize: '12px', color: '#92400e', marginBottom: '8px' }}>
+            Search for the client's Asana project below to create the task
+          </p>
+        )}
         <AsanaProjectSearch
           selectedProject={selectedProject}
           onSelect={handleProjectSelect}
@@ -342,6 +352,9 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
       <div style={styles.actions}>
         <button onClick={() => onNext()} style={styles.skipButton}>
           Next
+        </button>
+        <button onClick={handleMoveToSorted} disabled={moving || moved} style={styles.sortedSmallBtn}>
+          {moved ? 'Sorted' : moving ? '...' : 'Move to Sorted'}
         </button>
         <button
           onClick={handleApprove}
@@ -392,6 +405,7 @@ const styles: Record<string, React.CSSProperties> = {
   confirmRow: { display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '13px', borderBottom: '1px solid #eee' },
   confirmLabel: { color: 'var(--color-text-secondary)', fontWeight: 500 },
   confirmValue: { fontWeight: 600, textAlign: 'right' as const, maxWidth: '60%', overflow: 'hidden', textOverflow: 'ellipsis' },
+  sortedSmallBtn: { flex: '0 0 auto', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--color-success)', background: '#fff', color: 'var(--color-success)', fontSize: '12px', fontWeight: 600 },
   moveSection: { marginTop: '16px', textAlign: 'center' as const },
   moveBtn: { padding: '10px 24px', borderRadius: '8px', border: '2px solid var(--color-success)', background: '#fff', color: 'var(--color-success)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' },
   movedConfirm: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 16px', background: '#ecfdf5', borderRadius: '8px', color: 'var(--color-success)', fontSize: '14px', fontWeight: 500 },
