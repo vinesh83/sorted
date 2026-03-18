@@ -12,8 +12,7 @@ function useServerStatus() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const res = await fetch('/api/status');
-        const data = await res.json() as { processingCount: number };
+        const data = await api.get<{ processingCount: number }>('/status');
         setProcessingCount(data.processingCount);
       } catch {}
     };

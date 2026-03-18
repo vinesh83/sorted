@@ -205,7 +205,7 @@ export async function createFolder(path: string): Promise<void> {
   }
 }
 
-export async function moveFile(fromPath: string, toPath: string): Promise<void> {
+export async function moveFile(fromPath: string, toPath: string): Promise<string> {
   // Ensure destination folder exists
   const destFolder = toPath.substring(0, toPath.lastIndexOf('/'));
   await createFolder(destFolder);
@@ -219,6 +219,9 @@ export async function moveFile(fromPath: string, toPath: string): Promise<void> 
     const err = await res.text();
     throw new Error(`Dropbox move failed: ${err}`);
   }
+  // Return the actual path (may differ from toPath if autorename kicked in)
+  const data = await res.json() as { metadata: { path_display: string } };
+  return data.metadata.path_display;
 }
 
 export function getParalegalFolders(): Array<{ name: ParalegalName; path: string }> {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 
 interface Props {
@@ -12,6 +12,12 @@ export function DocumentViewer({ processedFileId, mimeType, fileName, documentId
   const [showText, setShowText] = useState(false);
   const [extractedText, setExtractedText] = useState<string | null>(null);
   const [loadingText, setLoadingText] = useState(false);
+
+  // Reset state when switching documents
+  useEffect(() => {
+    setShowText(false);
+    setExtractedText(null);
+  }, [processedFileId]);
 
   if (!processedFileId) {
     return (

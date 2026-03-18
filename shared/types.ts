@@ -46,7 +46,7 @@ export const EVENT_TYPE_TO_SECTION: Record<EventType, string | null> = {
 };
 
 // Document status
-export type DocumentStatus = 'pending' | 'unclassified' | 'approved' | 'skipped' | 'error';
+export type DocumentStatus = 'pending' | 'unclassified' | 'approved' | 'skipped' | 'sorted' | 'error';
 export type ProcessedFileStatus = 'pending' | 'ocr_failed' | 'classified' | 'approved' | 'error';
 
 // Classification result from Claude

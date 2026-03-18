@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import type { Document } from 'shared/types';
 
@@ -6,27 +6,34 @@ export function useDocuments(paralegal: string | null, status: string = 'pending
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const initialLoadDone = useRef(false);
+
+  // Reset on paralegal/status change
+  useEffect(() => {
+    initialLoadDone.current = false;
+    setLoading(true);
+    setDocuments([]);
+  }, [paralegal, status]);
 
   const refresh = useCallback(async () => {
     if (!paralegal) return;
     try {
-      // Only show loading spinner on initial load, not on polling refreshes
-      if (documents.length === 0) setLoading(true);
+      if (!initialLoadDone.current) setLoading(true);
       const res = await api.get<{ documents: Document[] }>(
         `/documents?paralegal=${paralegal}&status=${status}`,
       );
       setDocuments(res.documents);
+      initialLoadDone.current = true;
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load documents');
     } finally {
       setLoading(false);
     }
-  }, [paralegal, status, documents.length]);
+  }, [paralegal, status]);
 
   useEffect(() => {
     refresh();
-    // Poll every 10 seconds for new documents
     const interval = setInterval(refresh, 10_000);
     return () => clearInterval(interval);
   }, [refresh]);

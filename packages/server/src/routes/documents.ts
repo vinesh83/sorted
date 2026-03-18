@@ -31,7 +31,7 @@ router.get('/', (req, res) => {
 
   if (status && status !== 'all') {
     if (status === 'history') {
-      sql += " AND d.status IN ('approved', 'skipped')";
+      sql += " AND d.status IN ('approved', 'skipped', 'sorted')";
     } else if (status === 'pending') {
       // Show both pending (classified) and unclassified (OCR/classify failed) docs
       sql += " AND d.status IN ('pending', 'unclassified')";
@@ -175,10 +175,17 @@ router.post('/:id/approve', async (req, res) => {
     file_name: string;
     mime_type: string | null;
     dropbox_path: string;
+    status: string;
   } | undefined;
 
   if (!doc) {
     res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+
+  // Guard against double-approval
+  if (doc.status === 'approved' || doc.status === 'sorted') {
+    res.status(409).json({ error: 'Document already approved' });
     return;
   }
 
@@ -453,14 +460,14 @@ router.post('/:id/move-to-sorted', async (req, res) => {
     // Move to per-paralegal Sorted subfolder
     const sortedPath = `/New Sort Folder/${doc.paralegal_name}/Sorted/${doc.file_name}`;
 
-    await moveFile(doc.dropbox_path, sortedPath);
+    const actualPath = await moveFile(doc.dropbox_path, sortedPath);
 
-    // Update the dropbox_path and mark document as sorted
+    // Update the dropbox_path (use actual path in case autorename changed it)
     db.prepare('UPDATE processed_files SET dropbox_path = ? WHERE dropbox_path = ?')
-      .run(sortedPath, doc.dropbox_path);
+      .run(actualPath, doc.dropbox_path);
     db.prepare("UPDATE documents SET status = 'sorted' WHERE id = ?").run(id);
 
-    res.json({ moved: true, newPath: sortedPath });
+    res.json({ moved: true, newPath: actualPath });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[documents] Move to sorted failed:', msg);

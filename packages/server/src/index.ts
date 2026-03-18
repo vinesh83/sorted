@@ -12,6 +12,7 @@ import { filesRouter } from './routes/files.js';
 import { splitsRouter } from './routes/splits.js';
 import { startWatcher, getWatcherStatus, setOnNewFile, rescan } from './services/watcher.js';
 import { processFile } from './services/pipeline.js';
+import { verifyToken } from './middleware/auth.js';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
@@ -57,7 +58,7 @@ app.get('/api/status', (_req, res) => {
 });
 
 // Manual rescan — forces re-reading all folders from scratch
-app.post('/api/rescan', async (_req, res) => {
+app.post('/api/rescan', verifyToken, async (_req, res) => {
   try {
     await rescan();
     const db = getDb();
@@ -70,7 +71,7 @@ app.post('/api/rescan', async (_req, res) => {
 });
 
 // Bulk reprocess — re-runs OCR + classification on all unclassified documents
-app.post('/api/reprocess', async (_req, res) => {
+app.post('/api/reprocess', verifyToken, async (_req, res) => {
   try {
     const db = getDb();
     const unclassified = db.prepare(`
