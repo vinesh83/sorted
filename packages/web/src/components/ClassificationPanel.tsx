@@ -47,6 +47,8 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
       doc.asana_section_gid ? { gid: doc.asana_section_gid, name: doc.asana_section_name || '' } : null,
     );
     setResult(null);
+    setMoved(false);
+    setMoving(false);
   }, [doc.id]);
 
   // Save edits on blur
@@ -113,6 +115,8 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
     try {
       await api.post(`/documents/${doc.id}/move-to-sorted`);
       setMoved(true);
+      // Refresh queue to remove this doc, then advance to next
+      onRefreshQueue?.();
     } catch {
       // ignore
     } finally {

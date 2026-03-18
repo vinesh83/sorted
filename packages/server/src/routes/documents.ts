@@ -455,9 +455,10 @@ router.post('/:id/move-to-sorted', async (req, res) => {
 
     await moveFile(doc.dropbox_path, sortedPath);
 
-    // Update the dropbox_path in the database
+    // Update the dropbox_path and mark document as sorted
     db.prepare('UPDATE processed_files SET dropbox_path = ? WHERE dropbox_path = ?')
       .run(sortedPath, doc.dropbox_path);
+    db.prepare("UPDATE documents SET status = 'sorted' WHERE id = ?").run(id);
 
     res.json({ moved: true, newPath: sortedPath });
   } catch (err) {
