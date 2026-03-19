@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { verifyToken } from '../middleware/auth.js';
+import { shouldAutoTrigger, analyzeCorrectionsAndGenerateRules } from '../services/prompt-optimizer.js';
+import { notifyOpusAnalysisComplete } from '../services/notifier.js';
 import { getDb } from '../db/connection.js';
 import { createTask, moveTaskToSection, attachFile } from '../services/asana.js';
 import { downloadFile, moveFile } from '../services/dropbox.js';
@@ -322,6 +324,18 @@ router.post('/:id/approve', async (req, res) => {
   `);
   for (const c of corrections) {
     insertCorrection.run(Number(id), c.field, c.ai, c.human, paralegal, doc.file_name);
+  }
+
+  // Auto-trigger Opus analysis if threshold met
+  if (corrections.length > 0 && shouldAutoTrigger()) {
+    analyzeCorrectionsAndGenerateRules()
+      .then((result) => {
+        const rulesCount = result.rulesText.split('\n').filter((l) => l.trim()).length;
+        notifyOpusAnalysisComplete(result.version, rulesCount, result.correctionsAnalyzed, result.cost);
+      })
+      .catch((err) => {
+        console.error('[auto-optimize] Failed:', err instanceof Error ? err.message : err);
+      });
   }
 
   // Update document status

@@ -13,6 +13,14 @@ import { splitsRouter } from './routes/splits.js';
 import { startWatcher, getWatcherStatus, setOnNewFile, rescan } from './services/watcher.js';
 import { processFile } from './services/pipeline.js';
 import { verifyToken } from './middleware/auth.js';
+import {
+  analyzeCorrectionsAndGenerateRules,
+  getActiveRules,
+  getRulesHistory,
+  getCorrectionsSinceLastAnalysis,
+  shouldAutoTrigger,
+} from './services/prompt-optimizer.js';
+import { SYSTEM_PROMPT } from './services/classifier.js';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
@@ -149,6 +157,72 @@ app.get('/api/usage', (_req, res) => {
   `).get() as { totalCost: number; totalInputTokens: number; totalOutputTokens: number; requestCount: number };
 
   res.json({ ...summary, period });
+});
+
+// ---- Admin endpoints ----
+
+// GET /api/admin/rules — current active rules + history
+app.get('/api/admin/rules', verifyToken, (_req, res) => {
+  const active = getActiveRules();
+  const history = getRulesHistory();
+  res.json({ active, history });
+});
+
+// GET /api/admin/prompt — full assembled Haiku prompt with rules
+app.get('/api/admin/prompt', verifyToken, (_req, res) => {
+  const active = getActiveRules();
+  let fullPrompt = SYSTEM_PROMPT;
+  if (active?.rules_text) {
+    fullPrompt += `\n\nLEARNED RULES (from paralegal feedback — follow these strictly):\n${active.rules_text}`;
+  }
+  // Estimate token count (~4 chars per token)
+  const estimatedTokens = Math.ceil(fullPrompt.length / 4);
+  res.json({ prompt: fullPrompt, estimatedTokens, rulesVersion: active?.version ?? 0 });
+});
+
+// GET /api/admin/corrections-status — corrections count + trigger status
+app.get('/api/admin/corrections-status', verifyToken, (_req, res) => {
+  const db = getDb();
+  const correctionsSinceLastAnalysis = getCorrectionsSinceLastAnalysis();
+  const canTrigger = shouldAutoTrigger();
+  const totalCorrections = (db.prepare('SELECT COUNT(*) as c FROM corrections').get() as { c: number }).c;
+  const totalApproved = (db.prepare("SELECT COUNT(*) as c FROM documents WHERE status = 'approved'").get() as { c: number }).c;
+  const approvedWithCorrections = (db.prepare('SELECT COUNT(DISTINCT document_id) as c FROM corrections').get() as { c: number }).c;
+  const accuracyRate = totalApproved > 0 ? ((totalApproved - approvedWithCorrections) / totalApproved * 100) : null;
+
+  // Corrections by field
+  const byField = db.prepare(`
+    SELECT field_name, COUNT(*) as count FROM corrections GROUP BY field_name ORDER BY count DESC
+  `).all();
+
+  // Corrections over time (grouped by date)
+  const overTime = db.prepare(`
+    SELECT date(created_at) as date, COUNT(*) as count FROM corrections GROUP BY date(created_at) ORDER BY date ASC
+  `).all();
+
+  res.json({
+    correctionsSinceLastAnalysis,
+    triggerThreshold: 10,
+    canAutoTrigger: canTrigger,
+    totalCorrections,
+    totalApproved,
+    approvedWithCorrections,
+    accuracyRate,
+    byField,
+    overTime,
+  });
+});
+
+// POST /api/admin/optimize — manually trigger Opus analysis
+app.post('/api/admin/optimize', verifyToken, async (_req, res) => {
+  try {
+    const result = await analyzeCorrectionsAndGenerateRules();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[admin] Optimization failed:', msg);
+    res.status(500).json({ error: msg });
+  }
 });
 
 // Serve static frontend in production

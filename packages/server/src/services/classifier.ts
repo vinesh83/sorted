@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '../db/connection.js';
 import type { ClassificationResult, EventType } from 'shared/types.js';
 import { EVENT_TYPES } from 'shared/types.js';
+import { getActiveRules } from './prompt-optimizer.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -20,7 +21,7 @@ function getClient(): Anthropic {
   return client;
 }
 
-const SYSTEM_PROMPT = `You are a document classifier for an immigration law firm (vpatellaw.com). Given the extracted text from a scanned document, classify it with the following fields:
+export const SYSTEM_PROMPT = `You are a document classifier for an immigration law firm (vpatellaw.com). Given the extracted text from a scanned document, classify it with the following fields:
 
 1. documentLabel: A short descriptive label for the document type (e.g., "Bond Hearing Notice", "I-130 Petition", "Birth Certificate", "Proof of Income", "I-94 Record", "Client ID", "EOIR Notice", "EAD Card")
 2. clientName: The client's name if identifiable, in "Last, First" format. Look for the respondent/applicant/beneficiary name, not the attorney or government official.
@@ -58,10 +59,21 @@ export async function classifyDocument(
 
   const userMessage = `File name: ${fileName}\n\nExtracted text:\n${extractedText.slice(0, 16000)}`;
 
+  // Build system prompt with any active learned rules
+  let systemPrompt = SYSTEM_PROMPT;
+  try {
+    const activeRules = getActiveRules();
+    if (activeRules?.rules_text) {
+      systemPrompt += `\n\nLEARNED RULES (from paralegal feedback — follow these strictly):\n${activeRules.rules_text}`;
+    }
+  } catch {
+    // If rules lookup fails, use base prompt
+  }
+
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
   });
 
@@ -117,10 +129,21 @@ export async function classifyDocumentVision(
     'image/jpeg'
   ) as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
 
+  // Build system prompt with any active learned rules
+  let visionSystemPrompt = SYSTEM_PROMPT;
+  try {
+    const activeRules = getActiveRules();
+    if (activeRules?.rules_text) {
+      visionSystemPrompt += `\n\nLEARNED RULES (from paralegal feedback — follow these strictly):\n${activeRules.rules_text}`;
+    }
+  } catch {
+    // If rules lookup fails, use base prompt
+  }
+
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1024,
-    system: SYSTEM_PROMPT,
+    system: visionSystemPrompt,
     messages: [{
       role: 'user',
       content: [

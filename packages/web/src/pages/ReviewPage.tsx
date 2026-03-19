@@ -95,6 +95,7 @@ export function ReviewPage() {
         </div>
         <div style={styles.headerRight}>
           <a href="/history" style={styles.link}>History</a>
+          <a href="/admin" style={styles.link}>Admin</a>
           <a href="/history?tab=usage" style={styles.link}>API Usage</a>
           <button onClick={logout} style={styles.logoutBtn}>Sign out</button>
         </div>

@@ -4,6 +4,7 @@ import { LoginPage } from './pages/LoginPage';
 import { SelectParalegal } from './pages/SelectParalegal';
 import { ReviewPage } from './pages/ReviewPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { AdminPage } from './pages/AdminPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, paralegal } = useAuth();
@@ -45,6 +46,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <HistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminPage />
               </ProtectedRoute>
             }
           />

@@ -76,6 +76,17 @@ export function initDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS classification_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      version INTEGER NOT NULL,
+      rules_text TEXT NOT NULL,
+      opus_reasoning TEXT NOT NULL,
+      corrections_analyzed INTEGER NOT NULL DEFAULT 0,
+      accuracy_before REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      active INTEGER DEFAULT 1
+    );
+
     CREATE TABLE IF NOT EXISTS split_suggestions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       processed_file_id INTEGER NOT NULL REFERENCES processed_files(id),
