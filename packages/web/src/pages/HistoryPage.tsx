@@ -16,14 +16,14 @@ export function HistoryPage() {
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={styles.headerLeft}>
-          <a href="/" style={{ textDecoration: 'none', color: 'inherit' }}><h1 style={styles.logo}>Doc Triage</h1></a>
-          <span style={styles.badge}>{paralegal}</span>
+          <a href="/" style={styles.backLink}>← Back to Sort Queue</a>
+          <h1 style={styles.logo}>Doc Triage</h1>
+          <span style={styles.pageBadge}>{showUsage ? 'API Usage' : 'History'}</span>
         </div>
         <div style={styles.headerRight}>
           <button onClick={() => setShowUsage(!showUsage)} style={styles.linkBtn}>
             {showUsage ? 'History' : 'API Usage'}
           </button>
-          <a href="/" style={styles.link}>Queue</a>
           <a href="/admin" style={styles.link}>Admin</a>
           <button onClick={logout} style={styles.logoutBtn}>Sign out</button>
         </div>
@@ -118,6 +118,8 @@ const styles: Record<string, React.CSSProperties> = {
   headerLeft: { display: 'flex', alignItems: 'center', gap: '16px' },
   headerRight: { display: 'flex', alignItems: 'center', gap: '16px' },
   logo: { fontSize: '18px', fontWeight: 700 },
+  backLink: { color: 'var(--color-primary)', textDecoration: 'none', fontSize: '13px', fontWeight: 500 },
+  pageBadge: { padding: '3px 10px', borderRadius: '999px', background: '#e0e7ff', color: 'var(--color-primary)', fontSize: '12px', fontWeight: 600 },
   badge: {
     padding: '4px 12px',
     borderRadius: '999px',

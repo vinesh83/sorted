@@ -44,11 +44,11 @@ export function AdminPage() {
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={styles.headerLeft}>
-          <a href="/" style={{ textDecoration: 'none', color: 'inherit' }}><h1 style={styles.logo}>Doc Triage</h1></a>
+          <a href="/" style={styles.backLink}>← Back to Sort Queue</a>
+          <h1 style={styles.logo}>Doc Triage</h1>
           <span style={styles.adminBadge}>Admin</span>
         </div>
         <div style={styles.headerRight}>
-          <a href="/" style={styles.link}>Review Queue</a>
           <a href="/history" style={styles.link}>History</a>
         </div>
       </header>
@@ -359,6 +359,7 @@ const styles: Record<string, React.CSSProperties> = {
   headerLeft: { display: 'flex', alignItems: 'center', gap: '12px' },
   headerRight: { display: 'flex', alignItems: 'center', gap: '12px' },
   logo: { fontSize: '18px', fontWeight: 700 },
+  backLink: { color: 'var(--color-primary)', textDecoration: 'none', fontSize: '13px', fontWeight: 500 },
   adminBadge: { padding: '3px 10px', borderRadius: '999px', background: '#7c3aed', color: '#fff', fontSize: '12px', fontWeight: 600 },
   link: { color: 'var(--color-primary)', textDecoration: 'none', fontSize: '14px', cursor: 'pointer' },
   tabs: { display: 'flex', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)', padding: '0 20px' },

@@ -149,7 +149,7 @@ async function _runAnalysis(): Promise<{
     : '\nNo rules currently active (first analysis).\n';
 
   // Accuracy stats
-  const totalApproved = (db.prepare("SELECT COUNT(*) as c FROM documents WHERE status = 'approved'").get() as { c: number }).c;
+  const totalApproved = (db.prepare("SELECT COUNT(*) as c FROM documents WHERE status IN ('approved', 'sorted')").get() as { c: number }).c;
   const totalWithCorrections = (db.prepare('SELECT COUNT(DISTINCT document_id) as c FROM corrections').get() as { c: number }).c;
   const accuracyRate = totalApproved > 0 ? ((totalApproved - totalWithCorrections) / totalApproved * 100).toFixed(1) : 'N/A';
 

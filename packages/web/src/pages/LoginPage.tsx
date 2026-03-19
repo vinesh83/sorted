@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 export function LoginPage() {
@@ -9,10 +9,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  // If already logged in, redirect
+  // If already logged in, redirect (use Navigate component, not navigate() during render)
   if (token) {
-    navigate('/select', { replace: true });
-    return null;
+    return <Navigate to="/select" replace />;
   }
 
   const handleSubmit = async (e: FormEvent) => {

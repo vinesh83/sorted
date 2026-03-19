@@ -105,8 +105,14 @@ async function doProcess(processedFileId: number): Promise<void> {
               }
             } catch {
               console.warn(`[pipeline] pdftoppm failed, skipping vision for PDF`);
+              imageBuffer = Buffer.alloc(0); // Mark as failed so we skip vision
             }
             fs.default.unlinkSync(tmpPdf);
+          }
+
+          // Skip vision if we couldn't convert PDF to image
+          if (imageBuffer.length === 0) {
+            throw new Error('Could not convert PDF to image for vision classification');
           }
 
           const mimeForVision = file.mime_type?.startsWith('image/') ? file.mime_type : 'image/jpeg';

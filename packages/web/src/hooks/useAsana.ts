@@ -28,6 +28,7 @@ export function useAsanaSections(projectGid: string | null) {
 
   const loadSections = useCallback(async () => {
     if (!projectGid) { setSections([]); return; }
+    setSections([]); // Clear stale sections immediately
     setLoading(true);
     try {
       const res = await api.get<{ sections: AsanaSection[] }>(`/asana/projects/${projectGid}/sections`);

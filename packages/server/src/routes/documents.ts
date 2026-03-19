@@ -125,15 +125,15 @@ router.post('/:id/claim', (req, res) => {
   }
 
   if (doc.claimed_by && doc.claimed_by !== paralegal && doc.claimed_at) {
-    const claimedTime = new Date(doc.claimed_at).getTime();
+    const claimedTime = new Date(doc.claimed_at + 'Z').getTime(); // Append Z since SQLite stores UTC without timezone marker
     if (Date.now() - claimedTime < CLAIM_TIMEOUT_MS) {
       res.status(409).json({ error: `Being reviewed by ${doc.claimed_by}`, claimedBy: doc.claimed_by });
       return;
     }
   }
 
-  db.prepare('UPDATE documents SET claimed_by = ?, claimed_at = datetime(?) WHERE id = ?')
-    .run(paralegal, new Date().toISOString(), id);
+  db.prepare("UPDATE documents SET claimed_by = ?, claimed_at = datetime('now') WHERE id = ?")
+    .run(paralegal, id);
 
   res.json({ claimed: true });
 });
@@ -482,11 +482,13 @@ router.post('/:id/move-to-sorted', async (req, res) => {
   const { id } = req.params;
 
   const doc = db.prepare(`
-    SELECT pf.dropbox_path, pf.file_name, pf.paralegal_name
+    SELECT d.status as doc_status, pf.id as pf_id, pf.dropbox_path, pf.file_name, pf.paralegal_name
     FROM documents d
     JOIN processed_files pf ON d.processed_file_id = pf.id
     WHERE d.id = ?
   `).get(id) as {
+    doc_status: string;
+    pf_id: number;
     dropbox_path: string;
     file_name: string;
     paralegal_name: string;
@@ -497,15 +499,20 @@ router.post('/:id/move-to-sorted', async (req, res) => {
     return;
   }
 
+  if (doc.doc_status !== 'approved') {
+    res.status(400).json({ error: 'Document must be approved before moving to Sorted folder' });
+    return;
+  }
+
   try {
     // Move to per-paralegal Sorted subfolder
     const sortedPath = `/New Sort Folder/${doc.paralegal_name}/Sorted/${doc.file_name}`;
 
     const actualPath = await moveFile(doc.dropbox_path, sortedPath);
 
-    // Update the dropbox_path (use actual path in case autorename changed it)
-    db.prepare('UPDATE processed_files SET dropbox_path = ? WHERE dropbox_path = ?')
-      .run(actualPath, doc.dropbox_path);
+    // Update the dropbox_path using the processed file ID (unique)
+    db.prepare('UPDATE processed_files SET dropbox_path = ? WHERE id = ?')
+      .run(actualPath, doc.pf_id);
     db.prepare("UPDATE documents SET status = 'sorted' WHERE id = ?").run(id);
 
     res.json({ moved: true, newPath: actualPath });
