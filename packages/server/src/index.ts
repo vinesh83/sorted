@@ -111,25 +111,30 @@ app.post('/api/reprocess', verifyToken, async (_req, res) => {
 
 // Corrections endpoint — view paralegal corrections for prompt improvement
 app.get('/api/corrections', verifyToken, (_req, res) => {
-  const db = getDb();
-  const corrections = db.prepare(`
-    SELECT c.*, d.document_label as ai_doc_label, d.extracted_text
-    FROM corrections c
-    LEFT JOIN documents d ON c.document_id = d.id
-    ORDER BY c.created_at DESC
-    LIMIT 200
-  `).all();
+  try {
+    const db = getDb();
+    const corrections = db.prepare(`
+      SELECT c.id, c.document_id, c.field_name, c.ai_value, c.paralegal_value,
+             c.paralegal_name, c.file_name, c.created_at
+      FROM corrections c
+      ORDER BY c.created_at DESC
+      LIMIT 200
+    `).all();
 
-  // Summary stats
-  const summary = db.prepare(`
-    SELECT field_name, COUNT(*) as count,
-           GROUP_CONCAT(DISTINCT ai_value || ' → ' || paralegal_value, ' | ') as examples
-    FROM corrections
-    GROUP BY field_name
-    ORDER BY count DESC
-  `).all();
+    // Summary stats
+    const summary = db.prepare(`
+      SELECT field_name, COUNT(*) as count,
+             GROUP_CONCAT(DISTINCT COALESCE(ai_value, '(empty)') || ' -> ' || COALESCE(paralegal_value, '(empty)'), ' | ') as examples
+      FROM corrections
+      GROUP BY field_name
+      ORDER BY count DESC
+    `).all();
 
-  res.json({ corrections, summary });
+    res.json({ corrections, summary });
+  } catch (err) {
+    console.error('[corrections] Error:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // Usage endpoint
