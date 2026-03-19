@@ -19,7 +19,7 @@ router.get('/', (req, res) => {
   const { paralegal, status } = req.query;
 
   let sql = `
-    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path
+    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path, pf.dropbox_modified_at
     FROM documents d
     JOIN processed_files pf ON d.processed_file_id = pf.id
     WHERE 1=1
@@ -53,7 +53,7 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const db = getDb();
   const doc = db.prepare(`
-    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path
+    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path, pf.dropbox_modified_at
     FROM documents d
     JOIN processed_files pf ON d.processed_file_id = pf.id
     WHERE d.id = ?
@@ -99,7 +99,7 @@ router.patch('/:id', (req, res) => {
   db.prepare(`UPDATE documents SET ${setClauses.join(', ')} WHERE id = ?`).run(...values);
 
   const updated = db.prepare(`
-    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path
+    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path, pf.dropbox_modified_at
     FROM documents d
     JOIN processed_files pf ON d.processed_file_id = pf.id
     WHERE d.id = ?
@@ -158,7 +158,7 @@ router.post('/:id/approve', async (req, res) => {
   const paralegal = req.user!.paralegal;
 
   const doc = db.prepare(`
-    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path
+    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path, pf.dropbox_modified_at
     FROM documents d
     JOIN processed_files pf ON d.processed_file_id = pf.id
     WHERE d.id = ?
@@ -408,7 +408,7 @@ router.post('/:id/retry-classify', async (req, res) => {
     logUsage(doc.id, inputTokens, outputTokens, 'reclassification');
 
     const updated = db.prepare(`
-      SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path
+      SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path, pf.dropbox_modified_at
       FROM documents d
       JOIN processed_files pf ON d.processed_file_id = pf.id
       WHERE d.id = ?

@@ -85,6 +85,8 @@ export interface DropboxFileEntry {
   path_display: string;
   size: number;
   content_hash: string;
+  server_modified: string;
+  client_modified: string;
 }
 
 interface ListFolderResult {

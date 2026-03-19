@@ -24,6 +24,7 @@ export function initDb() {
       mime_type TEXT,
       content_hash TEXT,
       paralegal_name TEXT NOT NULL,
+      dropbox_modified_at TEXT,
       processed_at TEXT NOT NULL DEFAULT (datetime('now')),
       status TEXT NOT NULL DEFAULT 'pending'
     );
@@ -96,6 +97,14 @@ export function initDb() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Migrations for existing databases
+  try {
+    db.exec('ALTER TABLE processed_files ADD COLUMN dropbox_modified_at TEXT');
+    console.log('[db] Added dropbox_modified_at column');
+  } catch {
+    // Column already exists — ignore
+  }
 
   console.log('[db] Schema initialized');
 }

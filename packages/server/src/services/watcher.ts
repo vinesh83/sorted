@@ -43,8 +43,8 @@ function isNewFile(entry: DropboxFileEntry): boolean {
 function insertProcessedFile(entry: DropboxFileEntry, paralegalName: ParalegalName): number {
   const db = getDb();
   const result = db.prepare(`
-    INSERT INTO processed_files (dropbox_file_id, dropbox_path, file_name, file_size, mime_type, content_hash, paralegal_name, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+    INSERT INTO processed_files (dropbox_file_id, dropbox_path, file_name, file_size, mime_type, content_hash, paralegal_name, dropbox_modified_at, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
   `).run(
     entry.id,
     entry.path_display,
@@ -53,6 +53,7 @@ function insertProcessedFile(entry: DropboxFileEntry, paralegalName: ParalegalNa
     getMimeType(entry.name),
     entry.content_hash,
     paralegalName,
+    entry.server_modified || null,
   );
   return Number(result.lastInsertRowid);
 }

@@ -64,6 +64,14 @@ export function DocumentQueue({ documents, selectedId, onSelect, loading }: Prop
               )}
               <StatusBadge status={doc.status} />
             </div>
+            {doc.dropbox_modified_at && (
+              <div
+                style={styles.receivedDate}
+                title="Date file was added to New Sort Folder"
+              >
+                Received: {formatDate(doc.dropbox_modified_at)}
+              </div>
+            )}
             {doc.claimed_by && (
               <div style={styles.claimed}>Reviewing: {doc.claimed_by}</div>
             )}
@@ -72,6 +80,11 @@ export function DocumentQueue({ documents, selectedId, onSelect, loading }: Prop
       </div>
     </div>
   );
+}
+
+function formatDate(isoDate: string): string {
+  const d = new Date(isoDate);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function ConfidenceBadge({ confidence }: { confidence: number | null }) {
@@ -122,6 +135,7 @@ const styles: Record<string, React.CSSProperties> = {
   unclassified: { fontSize: '12px', color: 'var(--color-warning)', fontStyle: 'italic' },
   badge: { fontSize: '11px', fontWeight: 600, color: '#fff', padding: '2px 6px', borderRadius: '4px' },
   statusBadge: { fontSize: '11px', fontWeight: 500, textTransform: 'capitalize' },
+  receivedDate: { fontSize: '11px', color: 'var(--color-text-secondary)', cursor: 'help' },
   claimed: { fontSize: '11px', color: 'var(--color-warning)', fontStyle: 'italic' },
   loadingState: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '40px 20px', flex: 1 },
   spinner: {

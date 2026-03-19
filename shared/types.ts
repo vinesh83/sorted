@@ -80,6 +80,7 @@ export interface ProcessedFile {
   mime_type: string | null;
   content_hash: string | null;
   paralegal_name: ParalegalName;
+  dropbox_modified_at: string | null;
   processed_at: string;
   status: ProcessedFileStatus;
 }
@@ -127,6 +128,7 @@ export interface Document {
   // Joined from processed_files
   file_name?: string;
   mime_type?: string;
+  dropbox_modified_at?: string | null;
 }
 
 export interface AsanaProject {
