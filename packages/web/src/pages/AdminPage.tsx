@@ -272,32 +272,49 @@ function PerformanceTab() {
   if (loading) return <div style={styles.loading}>Loading performance data...</div>;
   if (!status) return null;
 
+  const perfectDocs = status.totalApproved - status.approvedWithCorrections;
+
   return (
     <div>
+      {/* Explanation */}
+      <div style={styles.explainerBox}>
+        <p style={styles.explainerText}>
+          When a paralegal changes an AI-suggested field before approving a document, that counts as a <strong>correction</strong>.
+          One document can have multiple corrections (e.g., both Event Type and Client Name changed).
+          As the AI learns from corrections, accuracy should improve over time.
+        </p>
+      </div>
+
       {/* Accuracy score card */}
       <div style={styles.statsGrid}>
-        <div style={styles.statCard}>
+        <div style={{ ...styles.statCard, borderTop: '3px solid var(--color-primary)' }}>
           <div style={styles.statValue}>
             {status.accuracyRate !== null ? `${status.accuracyRate.toFixed(1)}%` : 'N/A'}
           </div>
-          <div style={styles.statLabel}>Accuracy (no corrections needed)</div>
+          <div style={styles.statLabel}>AI Accuracy</div>
+          <div style={styles.statDesc}>
+            {perfectDocs} of {status.totalApproved} docs approved without any changes
+          </div>
         </div>
         <div style={styles.statCard}>
           <div style={styles.statValue}>{status.totalApproved}</div>
-          <div style={styles.statLabel}>Documents Approved</div>
+          <div style={styles.statLabel}>Docs Approved</div>
+          <div style={styles.statDesc}>Total documents reviewed and sent to Asana</div>
         </div>
         <div style={styles.statCard}>
           <div style={styles.statValue}>{status.totalCorrections}</div>
-          <div style={styles.statLabel}>Total Corrections</div>
+          <div style={styles.statLabel}>Field Corrections</div>
+          <div style={styles.statDesc}>Individual fields paralegals changed (1 doc can have multiple)</div>
         </div>
         <div style={styles.statCard}>
           <div style={styles.statValue}>{status.approvedWithCorrections}</div>
-          <div style={styles.statLabel}>Docs Needing Corrections</div>
+          <div style={styles.statLabel}>Docs With Corrections</div>
+          <div style={styles.statDesc}>Documents where at least one field was changed</div>
         </div>
       </div>
 
       {/* Most corrected fields */}
-      <h3 style={styles.sectionTitle}>Most Corrected Fields</h3>
+      <h3 style={styles.sectionTitle}>Which Fields Does the AI Get Wrong Most?</h3>
       <div style={styles.barChart}>
         {status.byField.map((f) => {
           const maxCount = Math.max(...status.byField.map((b) => b.count), 1);
@@ -317,7 +334,7 @@ function PerformanceTab() {
       {/* Corrections over time */}
       {status.overTime.length > 0 && (
         <>
-          <h3 style={styles.sectionTitle}>Corrections Over Time</h3>
+          <h3 style={styles.sectionTitle}>Corrections Per Day (should decrease as AI learns)</h3>
           <div style={styles.timeChart}>
             {status.overTime.map((d) => {
               const maxCount = Math.max(...status.overTime.map((t) => t.count), 1);
@@ -372,6 +389,8 @@ const styles: Record<string, React.CSSProperties> = {
   content: { flex: 1, overflow: 'auto', padding: '20px', maxWidth: '900px' },
   loading: { padding: '40px', textAlign: 'center', color: 'var(--color-text-secondary)' },
   emptyState: { padding: '40px 20px', textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: '14px' },
+  explainerBox: { background: '#f8fafc', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px' },
+  explainerText: { fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: '1.6', margin: 0 },
 
   // Progress card
   progressCard: { background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '16px', marginBottom: '20px' },
@@ -420,7 +439,8 @@ const styles: Record<string, React.CSSProperties> = {
   statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' },
   statCard: { background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', textAlign: 'center' },
   statValue: { fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)' },
-  statLabel: { fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' },
+  statLabel: { fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px', fontWeight: 600 },
+  statDesc: { fontSize: '11px', color: '#9ca3af', marginTop: '4px', lineHeight: '1.4' },
   barChart: { display: 'flex', flexDirection: 'column', gap: '8px' },
   barRow: { display: 'flex', alignItems: 'center', gap: '12px' },
   barLabel: { width: '120px', fontSize: '13px', fontWeight: 500, textAlign: 'right' },
