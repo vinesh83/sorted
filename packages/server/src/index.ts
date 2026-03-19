@@ -42,7 +42,7 @@ app.use('/api/files', filesRouter);
 app.use('/api/splits', splitsRouter);
 
 // Status endpoint with watcher health
-app.get('/api/status', (_req, res) => {
+app.get('/api/status', verifyToken, (_req, res) => {
   const db = getDb();
   const { watcherRunning, dropboxConnected, processingCount } = getWatcherStatus();
   const counts = db.prepare(`
@@ -133,9 +133,9 @@ app.get('/api/corrections', verifyToken, (_req, res) => {
 });
 
 // Usage endpoint
-app.get('/api/usage', (_req, res) => {
+app.get('/api/usage', verifyToken, (req, res) => {
   const db = getDb();
-  const period = (_req.query.period as string) || 'all';
+  const period = (req.query.period as string) || 'all';
 
   let dateFilter = '';
   if (period === 'today') {
@@ -186,7 +186,7 @@ app.get('/api/admin/corrections-status', verifyToken, (_req, res) => {
   const correctionsSinceLastAnalysis = getCorrectionsSinceLastAnalysis();
   const canTrigger = shouldAutoTrigger();
   const totalCorrections = (db.prepare('SELECT COUNT(*) as c FROM corrections').get() as { c: number }).c;
-  const totalApproved = (db.prepare("SELECT COUNT(*) as c FROM documents WHERE status = 'approved'").get() as { c: number }).c;
+  const totalApproved = (db.prepare("SELECT COUNT(*) as c FROM documents WHERE status IN ('approved', 'sorted')").get() as { c: number }).c;
   const approvedWithCorrections = (db.prepare('SELECT COUNT(DISTINCT document_id) as c FROM corrections').get() as { c: number }).c;
   const accuracyRate = totalApproved > 0 ? ((totalApproved - approvedWithCorrections) / totalApproved * 100) : null;
 

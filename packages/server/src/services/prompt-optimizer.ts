@@ -78,10 +78,32 @@ export function shouldAutoTrigger(): boolean {
   return getCorrectionsSinceLastAnalysis() >= 10 && canRunAnalysis();
 }
 
+// Concurrency lock to prevent simultaneous Opus analyses
+let isOptimizing = false;
+
 /**
  * Run Opus analysis on accumulated corrections and generate new classification rules.
  */
 export async function analyzeCorrectionsAndGenerateRules(): Promise<{
+  version: number;
+  rulesText: string;
+  reasoning: string;
+  correctionsAnalyzed: number;
+  inputTokens: number;
+  outputTokens: number;
+  cost: number;
+}> {
+  if (isOptimizing) throw new Error('Opus analysis already in progress');
+  isOptimizing = true;
+
+  try {
+    return await _runAnalysis();
+  } finally {
+    isOptimizing = false;
+  }
+}
+
+async function _runAnalysis(): Promise<{
   version: number;
   rulesText: string;
   reasoning: string;
@@ -201,20 +223,21 @@ Analyze these corrections, identify patterns, and generate classification rules.
   // Determine new version
   const newVersion = lastRules ? lastRules.version + 1 : 1;
 
-  // Deactivate old rules
-  db.prepare('UPDATE classification_rules SET active = 0').run();
-
-  // Insert new rules
-  db.prepare(`
-    INSERT INTO classification_rules (version, rules_text, opus_reasoning, corrections_analyzed, accuracy_before, active)
-    VALUES (?, ?, ?, ?, ?, 1)
-  `).run(
-    newVersion,
-    rulesText,
-    `${parsed.reasoning}\n\nEstimated impact: ${parsed.estimated_impact}`,
-    corrections.length,
-    accuracyRate === 'N/A' ? null : parseFloat(accuracyRate),
-  );
+  // Deactivate old rules + insert new ones in a transaction
+  const swapRules = db.transaction(() => {
+    db.prepare('UPDATE classification_rules SET active = 0').run();
+    db.prepare(`
+      INSERT INTO classification_rules (version, rules_text, opus_reasoning, corrections_analyzed, accuracy_before, active)
+      VALUES (?, ?, ?, ?, ?, 1)
+    `).run(
+      newVersion,
+      rulesText,
+      `${parsed.reasoning}\n\nEstimated impact: ${parsed.estimated_impact}`,
+      corrections.length,
+      accuracyRate === 'N/A' ? null : parseFloat(accuracyRate),
+    );
+  });
+  swapRules();
 
   // Log usage
   db.prepare(`

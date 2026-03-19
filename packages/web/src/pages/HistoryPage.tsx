@@ -24,6 +24,7 @@ export function HistoryPage() {
             {showUsage ? 'History' : 'API Usage'}
           </button>
           <a href="/" style={styles.link}>Queue</a>
+          <a href="/admin" style={styles.link}>Admin</a>
           <button onClick={logout} style={styles.logoutBtn}>Sign out</button>
         </div>
       </header>

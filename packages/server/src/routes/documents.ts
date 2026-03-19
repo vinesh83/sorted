@@ -329,9 +329,9 @@ router.post('/:id/approve', async (req, res) => {
   // Auto-trigger Opus analysis if threshold met
   if (corrections.length > 0 && shouldAutoTrigger()) {
     analyzeCorrectionsAndGenerateRules()
-      .then((result) => {
-        const rulesCount = result.rulesText.split('\n').filter((l) => l.trim()).length;
-        notifyOpusAnalysisComplete(result.version, rulesCount, result.correctionsAnalyzed, result.cost);
+      .then((optimizeResult) => {
+        const rulesCount = optimizeResult.rulesText.split('\n').filter((l) => l.trim()).length;
+        return notifyOpusAnalysisComplete(optimizeResult.version, rulesCount, optimizeResult.correctionsAnalyzed, optimizeResult.cost);
       })
       .catch((err) => {
         console.error('[auto-optimize] Failed:', err instanceof Error ? err.message : err);

@@ -73,10 +73,16 @@ router.get('/:id/preview', async (req, res) => {
     return;
   }
 
-  const isDocx = file.file_name.toLowerCase().endsWith('.docx') || file.file_name.toLowerCase().endsWith('.doc');
+  const isDocx = file.file_name.toLowerCase().endsWith('.docx');
+  const isDoc = file.file_name.toLowerCase().endsWith('.doc');
 
-  if (!isDocx) {
-    res.status(400).json({ error: 'Preview only supported for DOCX files' });
+  if (!isDocx && !isDoc) {
+    res.status(400).json({ error: 'Preview only supported for Word documents' });
+    return;
+  }
+
+  if (isDoc) {
+    res.status(400).json({ error: 'Legacy .doc format not supported for preview. Only .docx files can be previewed.' });
     return;
   }
 

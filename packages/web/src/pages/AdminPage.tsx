@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 
 type Tab = 'corrections' | 'rules' | 'prompt' | 'performance';
@@ -39,19 +38,18 @@ interface CorrectionsStatus {
 }
 
 export function AdminPage() {
-  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('corrections');
 
   return (
     <div style={styles.container}>
       <header style={styles.header}>
         <div style={styles.headerLeft}>
-          <h1 style={styles.logo}>Doc Triage</h1>
+          <a href="/" style={{ textDecoration: 'none', color: 'inherit' }}><h1 style={styles.logo}>Doc Triage</h1></a>
           <span style={styles.adminBadge}>Admin</span>
         </div>
         <div style={styles.headerRight}>
-          <a onClick={() => navigate('/')} style={styles.link}>Review Queue</a>
-          <a onClick={() => navigate('/history')} style={styles.link}>History</a>
+          <a href="/" style={styles.link}>Review Queue</a>
+          <a href="/history" style={styles.link}>History</a>
         </div>
       </header>
 

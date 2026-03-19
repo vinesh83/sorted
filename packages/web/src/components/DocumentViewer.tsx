@@ -96,8 +96,8 @@ export function DocumentViewer({ processedFileId, mimeType, fileName, documentId
     );
   }
 
-  // DOCX files — convert to HTML on server and render in iframe
-  const isDocx = fileName?.toLowerCase().endsWith('.docx') || fileName?.toLowerCase().endsWith('.doc');
+  // DOCX files — convert to HTML on server and render in iframe (only .docx, not legacy .doc)
+  const isDocx = fileName?.toLowerCase().endsWith('.docx');
 
   if (isDocx) {
     const previewUrl = `/api/files/${processedFileId}/preview?token=${encodeURIComponent(token)}`;
