@@ -80,6 +80,7 @@ function CorrectionsTab() {
   const [corrections, setCorrections] = useState<Correction[]>([]);
   const [status, setStatus] = useState<CorrectionsStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -88,10 +89,14 @@ function CorrectionsTab() {
     ]).then(([cRes, sRes]) => {
       setCorrections(cRes.corrections);
       setStatus(sRes);
+    }).catch((err) => {
+      console.error('Failed to load corrections:', err);
+      setError(err.message || 'Failed to load corrections');
     }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div style={styles.loading}>Loading corrections...</div>;
+  if (error) return <div style={{ ...styles.emptyState, color: '#e74c3c' }}>Error loading corrections: {error}</div>;
 
   const progress = status ? (status.correctionsSinceLastAnalysis / status.triggerThreshold) * 100 : 0;
 
