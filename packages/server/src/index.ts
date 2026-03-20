@@ -256,6 +256,55 @@ if (process.env.NODE_ENV === 'production') {
 // Wire up the file processing pipeline
 setOnNewFile(processFile);
 
+// --- Graceful shutdown: close SQLite cleanly to prevent corruption ---
+function shutdown(signal: string) {
+  console.log(`[server] ${signal} received — shutting down gracefully`);
+  try {
+    const db = getDb();
+    db.pragma('wal_checkpoint(TRUNCATE)');  // Flush WAL to main DB file
+    db.close();
+    console.log('[server] Database closed cleanly');
+  } catch (err) {
+    console.error('[server] Error closing database:', err);
+  }
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// --- Automatic daily database backup ---
+function backupDatabase() {
+  try {
+    const db = getDb();
+    const dbPath = process.env.DATABASE_PATH || './data/doctriage.db';
+    const backupDir = path.dirname(dbPath);
+    const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const backupPath = path.join(backupDir, `doctriage-backup-${timestamp}.db`);
+    db.backup(backupPath).then(() => {
+      console.log(`[backup] Database backed up to ${backupPath}`);
+      // Remove backups older than 7 days
+      import('fs').then(fs => {
+        const files = fs.readdirSync(backupDir);
+        const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        for (const file of files) {
+          if (file.startsWith('doctriage-backup-') && file.endsWith('.db')) {
+            const filePath = path.join(backupDir, file);
+            const stat = fs.statSync(filePath);
+            if (stat.mtimeMs < cutoff) {
+              fs.unlinkSync(filePath);
+              console.log(`[backup] Removed old backup: ${file}`);
+            }
+          }
+        }
+      });
+    }).catch((err: unknown) => {
+      console.error('[backup] Backup failed:', err);
+    });
+  } catch (err) {
+    console.error('[backup] Backup error:', err);
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`[server] Running on http://localhost:${PORT}`);
 
@@ -263,4 +312,8 @@ app.listen(PORT, () => {
   startWatcher().catch((err) => {
     console.error('[server] Failed to start watcher:', err);
   });
+
+  // Run a backup on startup, then every 24 hours
+  backupDatabase();
+  setInterval(backupDatabase, 24 * 60 * 60 * 1000);
 });
