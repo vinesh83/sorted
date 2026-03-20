@@ -124,8 +124,11 @@ app.get('/api/corrections', verifyToken, (_req, res) => {
     // Summary stats
     const summary = db.prepare(`
       SELECT field_name, COUNT(*) as count,
-             GROUP_CONCAT(DISTINCT COALESCE(ai_value, '(empty)') || ' -> ' || COALESCE(paralegal_value, '(empty)'), ' | ') as examples
-      FROM corrections
+             GROUP_CONCAT(COALESCE(ai_value, '(empty)') || ' -> ' || COALESCE(paralegal_value, '(empty)'), ' | ') as examples
+      FROM (
+        SELECT DISTINCT field_name, ai_value, paralegal_value
+        FROM corrections
+      )
       GROUP BY field_name
       ORDER BY count DESC
     `).all();
