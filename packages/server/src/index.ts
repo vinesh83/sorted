@@ -16,9 +16,11 @@ import { verifyToken } from './middleware/auth.js';
 import {
   analyzeCorrectionsAndGenerateRules,
   getActiveRules,
+  getPendingRules,
   getRulesHistory,
   getCorrectionsSinceLastAnalysis,
-  shouldAutoTrigger,
+  approveRules,
+  rejectRules,
 } from './services/prompt-optimizer.js';
 import { SYSTEM_PROMPT } from './services/classifier.js';
 
@@ -169,11 +171,32 @@ app.get('/api/usage', verifyToken, (req, res) => {
 
 // ---- Admin endpoints ----
 
-// GET /api/admin/rules — current active rules + history
+// GET /api/admin/rules — current active rules, pending rules, + history
 app.get('/api/admin/rules', verifyToken, (_req, res) => {
   const active = getActiveRules();
+  const pending = getPendingRules();
   const history = getRulesHistory();
-  res.json({ active, history });
+  res.json({ active, pending, history });
+});
+
+// POST /api/admin/rules/:version/approve — activate pending rules
+app.post('/api/admin/rules/:version/approve', verifyToken, (req, res) => {
+  const version = parseInt(req.params.version as string, 10);
+  if (approveRules(version)) {
+    res.json({ ok: true, version });
+  } else {
+    res.status(404).json({ error: 'No pending rules found for this version' });
+  }
+});
+
+// POST /api/admin/rules/:version/reject — delete pending rules
+app.post('/api/admin/rules/:version/reject', verifyToken, (req, res) => {
+  const version = parseInt(req.params.version as string, 10);
+  if (rejectRules(version)) {
+    res.json({ ok: true, version });
+  } else {
+    res.status(404).json({ error: 'No pending rules found for this version' });
+  }
 });
 
 // GET /api/admin/prompt — full assembled Haiku prompt with rules
@@ -192,7 +215,6 @@ app.get('/api/admin/prompt', verifyToken, (_req, res) => {
 app.get('/api/admin/corrections-status', verifyToken, (_req, res) => {
   const db = getDb();
   const correctionsSinceLastAnalysis = getCorrectionsSinceLastAnalysis();
-  const canTrigger = shouldAutoTrigger();
   const totalCorrections = (db.prepare('SELECT COUNT(*) as c FROM corrections').get() as { c: number }).c;
   const totalApproved = (db.prepare("SELECT COUNT(*) as c FROM documents WHERE status IN ('approved', 'sorted')").get() as { c: number }).c;
   const approvedWithCorrections = (db.prepare('SELECT COUNT(DISTINCT document_id) as c FROM corrections').get() as { c: number }).c;
@@ -211,7 +233,7 @@ app.get('/api/admin/corrections-status', verifyToken, (_req, res) => {
   res.json({
     correctionsSinceLastAnalysis,
     triggerThreshold: 10,
-    canAutoTrigger: canTrigger,
+    pendingRules: !!getPendingRules(),
     totalCorrections,
     totalApproved,
     approvedWithCorrections,

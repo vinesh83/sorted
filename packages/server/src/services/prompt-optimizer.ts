@@ -342,12 +342,11 @@ CORRECTIONS:`,
   // Determine new version
   const newVersion = lastRules ? lastRules.version + 1 : 1;
 
-  // Deactivate old rules + insert new ones in a transaction
+  // Insert new rules as PENDING (active = 0) — admin must approve before they take effect
   const swapRules = db.transaction(() => {
-    db.prepare('UPDATE classification_rules SET active = 0').run();
     db.prepare(`
       INSERT INTO classification_rules (version, rules_text, model_reasoning, corrections_analyzed, accuracy_before, active)
-      VALUES (?, ?, ?, ?, ?, 1)
+      VALUES (?, ?, ?, ?, ?, 0)
     `).run(
       newVersion,
       rulesText,
@@ -383,4 +382,37 @@ CORRECTIONS:`,
 export function getRulesHistory(): RulesRow[] {
   const db = getDb();
   return db.prepare('SELECT * FROM classification_rules ORDER BY version DESC').all() as RulesRow[];
+}
+
+/**
+ * Get pending (unapproved) rules awaiting admin review.
+ */
+export function getPendingRules(): RulesRow | null {
+  const db = getDb();
+  return (db.prepare('SELECT * FROM classification_rules WHERE active = 0 ORDER BY version DESC LIMIT 1').get() as RulesRow | undefined) ?? null;
+}
+
+/**
+ * Approve pending rules — deactivate old rules and activate the specified version.
+ */
+export function approveRules(version: number): boolean {
+  const db = getDb();
+  const pending = db.prepare('SELECT * FROM classification_rules WHERE version = ? AND active = 0').get(version) as RulesRow | undefined;
+  if (!pending) return false;
+
+  const activate = db.transaction(() => {
+    db.prepare('UPDATE classification_rules SET active = 0 WHERE active = 1').run();
+    db.prepare('UPDATE classification_rules SET active = 1 WHERE version = ?').run(version);
+  });
+  activate();
+  return true;
+}
+
+/**
+ * Reject pending rules — delete the specified version.
+ */
+export function rejectRules(version: number): boolean {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM classification_rules WHERE version = ? AND active = 0').run(version);
+  return result.changes > 0;
 }

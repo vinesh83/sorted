@@ -28,7 +28,7 @@ interface RulesVersion {
 interface CorrectionsStatus {
   correctionsSinceLastAnalysis: number;
   triggerThreshold: number;
-  canAutoTrigger: boolean;
+  pendingRules: boolean;
   totalCorrections: number;
   totalApproved: number;
   approvedWithCorrections: number;
@@ -114,8 +114,8 @@ function CorrectionsTab() {
           <div style={styles.progressBarBg}>
             <div style={{ ...styles.progressBarFill, width: `${Math.min(progress, 100)}%` }} />
           </div>
-          {status.canAutoTrigger && (
-            <p style={styles.progressNote}>Threshold reached — analysis will run on next correction</p>
+          {status.pendingRules && (
+            <p style={styles.progressNote}>Rules pending review — go to Active Rules tab to approve</p>
           )}
         </div>
       )}
@@ -150,14 +150,16 @@ function CorrectionsTab() {
 // ---- Tab 2: Active Rules ----
 function RulesTab() {
   const [active, setActive] = useState<RulesVersion | null>(null);
+  const [pending, setPending] = useState<RulesVersion | null>(null);
   const [history, setHistory] = useState<RulesVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const load = useCallback(() => {
-    api.get<{ active: RulesVersion | null; history: RulesVersion[] }>('/admin/rules')
-      .then((res) => { setActive(res.active); setHistory(res.history); })
+    api.get<{ active: RulesVersion | null; pending: RulesVersion | null; history: RulesVersion[] }>('/admin/rules')
+      .then((res) => { setActive(res.active); setPending(res.pending); setHistory(res.history); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -168,7 +170,7 @@ function RulesTab() {
     setOptimizeResult(null);
     try {
       const res = await api.post<{ ok: boolean; version: number; rulesText: string; correctionsAnalyzed: number; cost: number }>('/admin/optimize');
-      setOptimizeResult(`v${res.version} generated from ${res.correctionsAnalyzed} corrections ($${res.cost.toFixed(4)})`);
+      setOptimizeResult(`v${res.version} generated from ${res.correctionsAnalyzed} corrections ($${res.cost.toFixed(4)}) — review below`);
       load();
     } catch (err) {
       setOptimizeResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -177,17 +179,66 @@ function RulesTab() {
     }
   };
 
+  const handleApprove = async (version: number) => {
+    setActionLoading(true);
+    try {
+      await api.post(`/admin/rules/${version}/approve`);
+      load();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async (version: number) => {
+    setActionLoading(true);
+    try {
+      await api.post(`/admin/rules/${version}/reject`);
+      load();
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (loading) return <div style={styles.loading}>Loading rules...</div>;
 
   return (
     <div>
       <div style={styles.rulesActions}>
-        <button onClick={handleOptimize} disabled={optimizing} style={styles.optimizeBtn}>
-          {optimizing ? 'Running Opus Analysis...' : 'Run Opus Analysis Now'}
+        <button onClick={handleOptimize} disabled={optimizing || !!pending} style={styles.optimizeBtn}>
+          {optimizing ? 'Running Analysis...' : pending ? 'Review pending rules first' : 'Generate New Rules from Corrections'}
         </button>
         {optimizeResult && <span style={styles.optimizeResult}>{optimizeResult}</span>}
       </div>
 
+      {/* Pending rules — needs approval */}
+      {pending && (
+        <div style={styles.pendingRulesCard}>
+          <div style={styles.rulesCardHeader}>
+            <span style={styles.pendingBadge}>PENDING REVIEW</span>
+            <span>Version {pending.version} &middot; {new Date(pending.created_at).toLocaleDateString()}</span>
+            <span>{pending.corrections_analyzed} corrections analyzed</span>
+          </div>
+          <div style={styles.rulesList}>
+            {pending.rules_text.split('\n').filter((l) => l.trim()).map((rule, i) => (
+              <div key={i} style={styles.pendingRuleItem}>{rule}</div>
+            ))}
+          </div>
+          <div style={styles.rulesReasoning}>
+            <strong>Model Reasoning:</strong>
+            <p>{pending.model_reasoning}</p>
+          </div>
+          <div style={styles.pendingActions}>
+            <button onClick={() => handleApprove(pending.version)} disabled={actionLoading} style={styles.approveRulesBtn}>
+              {actionLoading ? 'Processing...' : 'Approve & Activate Rules'}
+            </button>
+            <button onClick={() => handleReject(pending.version)} disabled={actionLoading} style={styles.rejectRulesBtn}>
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Active rules */}
       {active ? (
         <div style={styles.activeRulesCard}>
           <div style={styles.rulesCardHeader}>
@@ -206,13 +257,13 @@ function RulesTab() {
           </div>
         </div>
       ) : (
-        <div style={styles.emptyState}>No rules generated yet. Rules are created when Opus analyzes accumulated paralegal corrections.</div>
+        !pending && <div style={styles.emptyState}>No rules generated yet. Click &quot;Generate New Rules&quot; after paralegals have made corrections.</div>
       )}
 
-      {history.length > 1 && (
+      {history.filter((h) => !h.active && h.version !== pending?.version).length > 0 && (
         <div style={styles.historySection}>
           <h3 style={styles.sectionTitle}>Previous Versions</h3>
-          {history.filter((h) => !h.active).map((h) => (
+          {history.filter((h) => !h.active && h.version !== pending?.version).map((h) => (
             <div key={h.id} style={styles.historyCard}>
               <div style={styles.historyHeader}>
                 <span>v{h.version} &middot; {new Date(h.created_at).toLocaleDateString()}</span>
@@ -363,7 +414,6 @@ function fieldLabel(field: string): string {
   const map: Record<string, string> = {
     document_label: 'Document Type',
     client_name: 'Client Name',
-    description: 'Description',
     event_type: 'Event Type',
     document_date: 'Date',
   };
@@ -422,6 +472,12 @@ const styles: Record<string, React.CSSProperties> = {
   rulesActions: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' },
   optimizeBtn: { padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#7c3aed', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
   optimizeResult: { fontSize: '13px', color: 'var(--color-text-secondary)' },
+  pendingRulesCard: { background: '#fffbeb', border: '2px solid #f59e0b', borderRadius: '8px', padding: '16px', marginBottom: '20px' },
+  pendingBadge: { padding: '2px 8px', borderRadius: '4px', background: '#f59e0b', color: '#fff', fontSize: '11px', fontWeight: 700 },
+  pendingRuleItem: { padding: '8px 12px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '6px', fontSize: '13px' },
+  pendingActions: { display: 'flex', gap: '12px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #fde68a' },
+  approveRulesBtn: { padding: '10px 24px', borderRadius: '8px', border: 'none', background: 'var(--color-success)', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
+  rejectRulesBtn: { padding: '10px 24px', borderRadius: '8px', border: '1px solid #e74c3c', background: '#fff', color: '#e74c3c', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
   activeRulesCard: { background: 'var(--color-surface)', border: '2px solid var(--color-success)', borderRadius: '8px', padding: '16px' },
   rulesCardHeader: { display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px', fontSize: '13px', color: 'var(--color-text-secondary)' },
   activeBadge: { padding: '2px 8px', borderRadius: '4px', background: 'var(--color-success)', color: '#fff', fontSize: '11px', fontWeight: 700 },

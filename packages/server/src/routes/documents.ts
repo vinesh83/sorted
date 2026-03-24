@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import { verifyToken } from '../middleware/auth.js';
-import { shouldAutoTrigger, analyzeCorrectionsAndGenerateRules } from '../services/prompt-optimizer.js';
-import { notifyOpusAnalysisComplete } from '../services/notifier.js';
 import { getDb } from '../db/connection.js';
 import { createTask, moveTaskToSection, attachFile } from '../services/asana.js';
 import { downloadFile, moveFile } from '../services/dropbox.js';
@@ -449,18 +447,6 @@ router.post('/:id/approve', async (req, res) => {
     updateStatus.run(paralegal, asanaError, id);
   });
   commitApproval();
-
-  // Auto-trigger analysis if threshold met (fire-and-forget, after transaction)
-  if (corrections.length > 0 && shouldAutoTrigger()) {
-    analyzeCorrectionsAndGenerateRules()
-      .then((optimizeResult) => {
-        const rulesCount = optimizeResult.rulesText.split('\n').filter((l) => l.trim()).length;
-        return notifyOpusAnalysisComplete(optimizeResult.version, rulesCount, optimizeResult.correctionsAnalyzed, optimizeResult.cost);
-      })
-      .catch((err) => {
-        console.error('[auto-optimize] Failed:', err instanceof Error ? err.message : err);
-      });
-  }
 
   res.json({
     result: {
