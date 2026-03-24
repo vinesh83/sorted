@@ -11,6 +11,14 @@ The task title is built as "{documentLabel}, {date}" so documentLabel should be 
 
 FOR "Received" DOCUMENTS:
 - USCIS notices: "{Form Number}, {Notice Type}"
+  CRITICAL: I-797 is a GENERIC USCIS notice form — it is the form number of the notice ITSELF, not the
+  underlying petition/application. NEVER use "I-797" as the form number in documentLabel. Instead, identify
+  the UNDERLYING form the notice is about. Look for "Re:" lines, "Form:" fields, receipt number prefixes
+  (e.g., WAC/EAC/LIN/SRC prefixes), or references to the petition type within the notice text/image.
+  For example: an I-797C receipt notice for an I-130 petition should be labeled "I-130, Receipt Notice"
+  (NOT "I-797, Receipt Notice" or "I-797C, Receipt Notice"). Similarly, an I-797 approval for I-485
+  should be "I-485, Approval Notice". If you truly cannot determine the underlying form, use the notice
+  type alone (e.g., "Receipt Notice" or "Approval Notice") rather than "I-797".
   Forms: I-90, I-102, I-192, I-129, I-130, I-131, I-212, I-290B, I-360, I-485, I-539, I-589,
          I-601, I-601A, I-751, I-765, I-821, I-821D, I-912, I-918, I-918 Supp A, I-918 Supp B,
          N-336, N-400, N-600, EOIR 42A (fee in), EOIR 42B (fee-in)
