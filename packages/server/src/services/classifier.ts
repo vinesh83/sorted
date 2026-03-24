@@ -49,9 +49,7 @@ Classify with the following fields:
 6. documentDate: The most relevant date on the document (issue date, receipt date, or filing date) in YYYY-MM-DD format. If no date found, return null.
 7. confidence: 0.0 to 1.0 how confident you are in the overall classification
 8. isLegalDocument: true if this is a legal/immigration document, false if it's a random file (screenshot, temp file, etc.)
-9. isMultipleDocuments: true if the text appears to contain multiple distinct documents combined into one file
-10. suggestedSplits: If isMultipleDocuments is true, an array of {pageStart, pageEnd, reason} identifying where each document begins and ends
-11. reasoning: Brief explanation of your classification
+9. reasoning: Brief explanation of your classification
 
 ${buildDocumentLabelGuidance()}
 

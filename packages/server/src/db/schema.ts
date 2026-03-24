@@ -88,14 +88,6 @@ export function initDb() {
       active INTEGER DEFAULT 1
     );
 
-    CREATE TABLE IF NOT EXISTS split_suggestions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      processed_file_id INTEGER NOT NULL REFERENCES processed_files(id),
-      suggested_splits TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      final_splits TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
   `);
 
   // Migrations for existing databases

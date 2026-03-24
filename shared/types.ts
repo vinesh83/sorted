@@ -59,15 +59,7 @@ export interface ClassificationResult {
   documentDate: string | null;
   confidence: number;
   isLegalDocument: boolean;
-  isMultipleDocuments: boolean;
-  suggestedSplits: SplitSuggestion[];
   reasoning: string;
-}
-
-export interface SplitSuggestion {
-  pageStart: number;
-  pageEnd: number;
-  reason: string;
 }
 
 // API response types
@@ -88,9 +80,6 @@ export interface ProcessedFile {
 export interface Document {
   id: number;
   processed_file_id: number;
-  page_start: number | null;
-  page_end: number | null;
-  split_group_id: string | null;
   extracted_text: string | null;
   ocr_partial: boolean;
   // AI classification

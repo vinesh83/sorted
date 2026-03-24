@@ -4,7 +4,7 @@ import { EVENT_TYPES, EVENT_TYPE_TO_SECTION } from 'shared/types';
 import { api } from '../api/client';
 import { AsanaProjectSearch } from './AsanaProjectSearch';
 import { SectionPicker } from './SectionPicker';
-import { SplitSuggestion } from './SplitSuggestion';
+
 
 interface Props {
   document: Document;
@@ -265,11 +265,6 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
           Partial OCR — only first 20 pages analyzed
         </div>
       )}
-
-      <SplitSuggestion
-        processedFileId={doc.processed_file_id}
-        onSplitAccepted={() => { onRefreshQueue?.(); onNext(); }}
-      />
 
       {/* Classification fields */}
       <div style={styles.section}>

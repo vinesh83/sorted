@@ -9,7 +9,7 @@ import { authRouter } from './routes/auth.js';
 import { documentsRouter } from './routes/documents.js';
 import { asanaRouter } from './routes/asana.js';
 import { filesRouter } from './routes/files.js';
-import { splitsRouter } from './routes/splits.js';
+
 import { startWatcher, getWatcherStatus, setOnNewFile, rescan } from './services/watcher.js';
 import { processFile } from './services/pipeline.js';
 import { verifyToken } from './middleware/auth.js';
@@ -39,7 +39,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api/asana', asanaRouter);
 app.use('/api/files', filesRouter);
-app.use('/api/splits', splitsRouter);
+
 
 // Status endpoint with watcher health
 app.get('/api/status', verifyToken, (_req, res) => {

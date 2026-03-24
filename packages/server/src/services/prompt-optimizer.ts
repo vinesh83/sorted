@@ -3,6 +3,7 @@ import { getDb } from '../db/connection.js';
 import { getCached, putCache } from './filecache.js';
 import { downloadFile } from './dropbox.js';
 import { convertPdfToImages } from './pdf-utils.js';
+import { buildDocumentLabelGuidance } from './asana-form-vocabulary.js';
 
 const ANALYSIS_MODEL = 'claude-sonnet-4-6';
 
@@ -239,7 +240,9 @@ IMPORTANT GUIDELINES:
 - If multiple corrections point to the same pattern, consolidate into one rule
 - Prioritize rules that would have the highest impact (most frequent errors first)
 - Consider that paralegals may use slightly different wording — normalize to canonical terms
-- The firm uses an Asana form with specific naming conventions. For USCIS "Received" documents, the expected label format is "{Form Number}, {Notice Type}" (e.g., "I-130, Receipt Notice"). For NVC, DOS, Court, ICE/DHS, and BIA documents, use the exact notice names from the Asana form. For FOIA responses, use "{Agency} FOIA Response". When generating rules, align corrections toward these canonical label formats.
+- The firm uses specific naming conventions for document labels. Here is the full guide that the classifier uses:
+${buildDocumentLabelGuidance()}
+When generating rules, align corrections toward these canonical label formats.
 - Maximum 20 rules (quality over quantity)
 
 OUTPUT FORMAT:

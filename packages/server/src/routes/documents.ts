@@ -648,8 +648,8 @@ router.post('/:id/move-to-sorted', async (req, res) => {
     return;
   }
 
-  if (doc.doc_status !== 'approved') {
-    res.status(400).json({ error: 'Document must be approved before moving to Sorted folder' });
+  if (!['pending', 'approved', 'unclassified'].includes(doc.doc_status)) {
+    res.status(400).json({ error: 'Document has already been sorted or skipped' });
     return;
   }
 

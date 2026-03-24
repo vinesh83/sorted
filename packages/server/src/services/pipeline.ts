@@ -147,15 +147,6 @@ async function doProcess(processedFileId: number): Promise<void> {
     // Log API usage
     logUsage(documentId, inputTokens, outputTokens, requestType);
 
-    // Handle multi-doc detection
-    if (classification.isMultipleDocuments && classification.suggestedSplits?.length > 0) {
-      db.prepare(`
-        INSERT INTO split_suggestions (processed_file_id, suggested_splits, status)
-        VALUES (?, ?, 'pending')
-      `).run(processedFileId, JSON.stringify(classification.suggestedSplits));
-      console.log(`[pipeline] Multi-doc detected: ${classification.suggestedSplits.length} splits suggested`);
-    }
-
     db.prepare("UPDATE processed_files SET status = 'classified' WHERE id = ?").run(processedFileId);
     console.log(`[pipeline] Classified: ${file.file_name} → ${classification.documentLabel} (${Math.round(classification.confidence * 100)}%)`);
   } catch (err) {
