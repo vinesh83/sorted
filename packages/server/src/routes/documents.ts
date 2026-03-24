@@ -73,7 +73,7 @@ router.post('/reclassify-all', async (req, res) => {
     if (docs.length > 0) {
       db.prepare(`
         UPDATE documents SET
-          edited_label = NULL, edited_client_name = NULL, edited_description = NULL,
+          edited_label = NULL, edited_client_name = NULL,
           edited_event_type = NULL, edited_date = NULL,
           asana_project_gid = NULL, asana_project_name = NULL,
           asana_section_gid = NULL, asana_section_name = NULL
@@ -129,14 +129,13 @@ router.post('/reclassify-all', async (req, res) => {
 
         db.prepare(`
           UPDATE documents SET
-            document_label = ?, client_name = ?, description = ?, event_type = ?,
+            document_label = ?, client_name = ?, event_type = ?,
             suggested_section = ?, document_date = ?, confidence = ?,
             is_legal_document = ?, classification_error = NULL, status = 'pending'
           WHERE id = ?
         `).run(
           classification.documentLabel,
           classification.clientName,
-          classification.description,
           classification.eventType,
           classification.suggestedSection,
           classification.documentDate,
@@ -188,7 +187,7 @@ router.patch('/:id', (req, res) => {
   const updates = req.body;
 
   const allowedFields = [
-    'edited_label', 'edited_client_name', 'edited_description',
+    'edited_label', 'edited_client_name',
     'edited_event_type', 'edited_date',
     'asana_project_gid', 'asana_project_name',
     'asana_section_gid', 'asana_section_name',
@@ -282,8 +281,6 @@ router.post('/:id/approve', async (req, res) => {
     client_name: string | null;
     edited_label: string | null;
     edited_client_name: string | null;
-    description: string | null;
-    edited_description: string | null;
     event_type: string | null;
     edited_event_type: string | null;
     document_date: string | null;
@@ -309,7 +306,6 @@ router.post('/:id/approve', async (req, res) => {
 
   // Resolve final values (edited overrides AI)
   const documentLabel = doc.edited_label || doc.document_label || 'Untitled Document';
-  const description = doc.edited_description || doc.description || documentLabel;
   const eventType = (doc.edited_event_type || doc.event_type || 'Received') as EventType;
   const docDate = doc.edited_date || doc.document_date;
   const projectGid = doc.asana_project_gid;
@@ -423,9 +419,6 @@ router.post('/:id/approve', async (req, res) => {
   if (doc.edited_client_name && doc.edited_client_name !== doc.client_name) {
     corrections.push({ field: 'client_name', ai: doc.client_name, human: doc.edited_client_name });
   }
-  if (doc.edited_description && doc.edited_description !== doc.description) {
-    corrections.push({ field: 'description', ai: doc.description, human: doc.edited_description });
-  }
   if (doc.edited_event_type && doc.edited_event_type !== doc.event_type) {
     corrections.push({ field: 'event_type', ai: doc.event_type, human: doc.edited_event_type });
   }
@@ -538,14 +531,13 @@ router.post('/:id/retry-classify', async (req, res) => {
 
     db.prepare(`
       UPDATE documents SET
-        document_label = ?, client_name = ?, description = ?, event_type = ?,
+        document_label = ?, client_name = ?, event_type = ?,
         suggested_section = ?, document_date = ?, confidence = ?,
         is_legal_document = ?, classification_error = NULL, status = 'pending'
       WHERE id = ?
     `).run(
       classification.documentLabel,
       classification.clientName,
-      classification.description,
       classification.eventType,
       classification.suggestedSection,
       classification.documentDate,

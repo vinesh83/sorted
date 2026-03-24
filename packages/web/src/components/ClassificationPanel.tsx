@@ -20,7 +20,6 @@ interface Props {
 export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip, onNext, onRefreshQueue, onRetryClassify, onRetryAttach }: Props) {
   const [label, setLabel] = useState('');
   const [clientName, setClientName] = useState('');
-  const [description, setDescription] = useState('');
   const [eventType, setEventType] = useState<EventType | ''>('');
   const [docDate, setDocDate] = useState('');
   const [selectedProject, setSelectedProject] = useState<AsanaProject | null>(null);
@@ -37,7 +36,6 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
   useEffect(() => {
     setLabel(doc.edited_label || doc.document_label || '');
     setClientName(doc.edited_client_name || doc.client_name || '');
-    setDescription(doc.edited_description || doc.description || '');
     setEventType((doc.edited_event_type || doc.event_type || '') as EventType | '');
     setDocDate(doc.edited_date || doc.document_date || new Date().toISOString().split('T')[0]);
     setSelectedProject(
@@ -91,7 +89,6 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
       await onUpdate({
         edited_label: label || null,
         edited_client_name: clientName || null,
-        edited_description: description || null,
         edited_event_type: eventType || null,
         edited_date: docDate || null,
       });
@@ -246,7 +243,7 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
         </div>
       )}
 
-      {doc.classification_error && (
+      {!!doc.classification_error && (
         <div style={styles.errorBanner}>
           Classification failed: {doc.classification_error}
           {onRetryClassify && (
@@ -260,7 +257,7 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
         </div>
       )}
 
-      {doc.ocr_partial && (
+      {!!doc.ocr_partial && (
         <div style={styles.warningBanner}>
           Partial OCR — only first 20 pages analyzed
         </div>
@@ -285,15 +282,6 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
             onBlur={() => saveField('edited_client_name', clientName)}
             style={styles.input}
             placeholder="Last, First"
-          />
-        </FieldRow>
-        <FieldRow label="Description">
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={() => saveField('edited_description', description)}
-            style={styles.input}
-            placeholder="Task name description"
           />
         </FieldRow>
         <FieldRow label="Event Type">

@@ -32,8 +32,7 @@ Classify with the following fields:
 
 1. documentLabel: A short label for the document type, following the DOCUMENT LABEL FORMAT GUIDE below. Use exact terminology from the guide when the document matches a known type. For unrecognized documents, infer the label a paralegal would use based on the same naming conventions.
 2. clientName: The client's name if identifiable, in "Last, First" format. Look for the respondent/applicant/beneficiary name, not the attorney or government official.
-3. description: A one-line description suitable as an Asana task name (e.g., "Bond Hearing Notice for I-42B application")
-4. eventType: One of: ${EVENT_TYPES.join(', ')}
+3. eventType: One of: ${EVENT_TYPES.join(', ')}
    - "Received" = document received from a government agency (USCIS, EOIR, court)
    - "Sent/Filed" = document sent/filed by the firm
    - "Supporting Doc(s)" = client-provided supporting documents (birth certs, IDs, proof of income, etc.)
@@ -41,15 +40,15 @@ Classify with the following fields:
    - "Physical Document" = original physical documents scanned in
    - "Note/Strategy" = internal notes or strategy memos
    - "Action" = something that requires follow-up action
-5. suggestedSection: Based on eventType:
+4. suggestedSection: Based on eventType:
    - Received or Sent/Filed → "Filings and Official Correspondence"
    - Supporting Doc(s) or Physical Document → "Client Supporting Documents"
    - Criminal Records → "Criminal Records/Requests"
    - Note/Strategy or Action → null
-6. documentDate: The most relevant date on the document (issue date, receipt date, or filing date) in YYYY-MM-DD format. If no date found, return null.
-7. confidence: 0.0 to 1.0 how confident you are in the overall classification
-8. isLegalDocument: true if this is a legal/immigration document, false if it's a random file (screenshot, temp file, etc.)
-9. reasoning: Brief explanation of your classification
+5. documentDate: The most relevant date on the document (issue date, receipt date, or filing date) in YYYY-MM-DD format. If no date found, return null.
+6. confidence: 0.0 to 1.0 how confident you are in the overall classification
+7. isLegalDocument: true if this is a legal/immigration document, false if it's a random file (screenshot, temp file, etc.)
+8. reasoning: Brief explanation of your classification
 
 ${buildDocumentLabelGuidance()}
 

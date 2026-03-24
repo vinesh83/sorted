@@ -124,17 +124,16 @@ async function doProcess(processedFileId: number): Promise<void> {
     const result = db.prepare(`
       INSERT INTO documents (
         processed_file_id, extracted_text, ocr_partial,
-        document_label, client_name, description, event_type, suggested_section,
+        document_label, client_name, event_type, suggested_section,
         document_date, confidence, is_legal_document,
         status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'))
     `).run(
       processedFileId,
       storedText,
       ocrPartial ? 1 : 0,
       classification.documentLabel,
       classification.clientName,
-      classification.description,
       classification.eventType,
       classification.suggestedSection,
       classification.documentDate,

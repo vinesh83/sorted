@@ -53,7 +53,6 @@ export type ProcessedFileStatus = 'pending' | 'ocr_failed' | 'classified' | 'app
 export interface ClassificationResult {
   documentLabel: string;
   clientName: string;
-  description: string;
   eventType: EventType;
   suggestedSection: string | null;
   documentDate: string | null;
@@ -85,7 +84,6 @@ export interface Document {
   // AI classification
   document_label: string | null;
   client_name: string | null;
-  description: string | null;
   event_type: EventType | null;
   suggested_section: string | null;
   document_date: string | null;
@@ -95,7 +93,6 @@ export interface Document {
   // Paralegal edits
   edited_label: string | null;
   edited_client_name: string | null;
-  edited_description: string | null;
   edited_event_type: EventType | null;
   edited_date: string | null;
   // Asana targeting
