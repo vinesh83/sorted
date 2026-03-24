@@ -6,6 +6,7 @@ const DROPBOX_CONTENT = 'https://content.dropboxapi.com/2';
 let accessToken = '';
 let tokenExpiresAt = 0;
 let rootNamespaceId = '';
+let refreshPromise: Promise<string> | null = null;
 
 async function getAccessToken(): Promise<string> {
   const appKey = process.env.DROPBOX_APP_KEY;
@@ -18,27 +19,36 @@ async function getAccessToken(): Promise<string> {
       return accessToken; // still valid (with 60s buffer)
     }
 
-    const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: appKey,
-        client_secret: appSecret,
-      }),
+    // Prevent concurrent refresh calls — share the same promise
+    if (refreshPromise) return refreshPromise;
+
+    refreshPromise = (async () => {
+      const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          client_id: appKey,
+          client_secret: appSecret,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Dropbox token refresh failed: ${err}`);
+      }
+
+      const data = (await res.json()) as { access_token: string; expires_in: number };
+      accessToken = data.access_token;
+      tokenExpiresAt = Date.now() + data.expires_in * 1000;
+      console.log('[dropbox] Token refreshed, expires in', data.expires_in, 'seconds');
+      return accessToken;
+    })().finally(() => {
+      refreshPromise = null;
     });
 
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Dropbox token refresh failed: ${err}`);
-    }
-
-    const data = (await res.json()) as { access_token: string; expires_in: number };
-    accessToken = data.access_token;
-    tokenExpiresAt = Date.now() + data.expires_in * 1000;
-    console.log('[dropbox] Token refreshed, expires in', data.expires_in, 'seconds');
-    return accessToken;
+    return refreshPromise;
   }
 
   // Fallback to static access token from env (short-lived, for development)

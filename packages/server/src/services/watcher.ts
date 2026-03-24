@@ -18,6 +18,7 @@ const cursors = new Map<string, string>();
 let watcherRunning = false;
 let dropboxConnected = false;
 let processingCount = 0;
+let pollTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Pipeline callback — set by index.ts to wire OCR + classification
 let onNewFile: ((fileId: number) => Promise<void>) | null = null;
@@ -161,10 +162,12 @@ export async function startWatcher() {
       console.error('[watcher] Poll error:', err);
     }
 
-    setTimeout(poll, POLL_INTERVAL);
+    if (watcherRunning) {
+      pollTimeout = setTimeout(poll, POLL_INTERVAL);
+    }
   };
 
-  setTimeout(poll, POLL_INTERVAL);
+  pollTimeout = setTimeout(poll, POLL_INTERVAL);
 }
 
 export async function rescan() {
@@ -175,5 +178,9 @@ export async function rescan() {
 
 export function stopWatcher() {
   watcherRunning = false;
+  if (pollTimeout) {
+    clearTimeout(pollTimeout);
+    pollTimeout = null;
+  }
   console.log('[watcher] Stopped');
 }

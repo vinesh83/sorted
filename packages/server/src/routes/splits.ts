@@ -5,6 +5,7 @@ import { extractPages, type SplitRange } from '../services/splitter.js';
 import { downloadFile } from '../services/dropbox.js';
 import { extractText } from '../services/ocr.js';
 import { classifyDocument, logUsage } from '../services/classifier.js';
+import { convertPdfToImages } from '../services/pdf-utils.js';
 
 const router = Router();
 
@@ -80,12 +81,16 @@ router.post('/:fileId/accept', async (req, res) => {
       // OCR the split
       const ocrResult = await extractText(splitBuffer, 'application/pdf', file.file_name);
 
+      // Convert split pages to images for vision classification
+      const pageImages = await convertPdfToImages(splitBuffer, { dpi: 150 });
+
       // Classify
       let docId: number;
-      if (ocrResult.text) {
+      if (ocrResult.text || pageImages.length > 0) {
         try {
           const { classification, inputTokens, outputTokens } = await classifyDocument(
-            ocrResult.text,
+            pageImages,
+            ocrResult.text || '',
             `${file.file_name} (pages ${split.pageStart}-${split.pageEnd})`,
           );
 
@@ -122,7 +127,7 @@ router.post('/:fileId/accept', async (req, res) => {
           INSERT INTO documents (
             processed_file_id, page_start, page_end, split_group_id,
             classification_error, status, created_at
-          ) VALUES (?, ?, ?, ?, 'OCR failed on split', 'unclassified', datetime('now'))
+          ) VALUES (?, ?, ?, ?, 'No text or images available for split', 'unclassified', datetime('now'))
         `).run(fileId, split.pageStart, split.pageEnd, `split-${suggestion.id}`);
         docId = Number(result.lastInsertRowid);
       }
@@ -175,6 +180,17 @@ router.post('/:fileId/edit', async (req, res) => {
     return;
   }
 
+  // Validate each split range
+  for (const split of splits) {
+    if (!Number.isInteger(split.pageStart) || !Number.isInteger(split.pageEnd) ||
+        split.pageStart < 1 || split.pageEnd < 1 || split.pageStart > split.pageEnd) {
+      res.status(400).json({
+        error: `Invalid page range: pageStart=${split.pageStart}, pageEnd=${split.pageEnd}. Must be positive integers with pageStart <= pageEnd.`,
+      });
+      return;
+    }
+  }
+
   // Update the suggestion with edited splits, then process like accept
   const suggestion = db.prepare(
     "SELECT id FROM split_suggestions WHERE processed_file_id = ? AND status = 'pending'",
@@ -212,11 +228,15 @@ router.post('/:fileId/edit', async (req, res) => {
       const splitBuffer = await extractPages(pdfBuffer, split.pageStart, split.pageEnd);
       const ocrResult = await extractText(splitBuffer, 'application/pdf', file.file_name);
 
+      // Convert split pages to images for vision classification
+      const pageImages = await convertPdfToImages(splitBuffer, { dpi: 150 });
+
       let docId: number;
-      if (ocrResult.text) {
+      if (ocrResult.text || pageImages.length > 0) {
         try {
           const { classification, inputTokens, outputTokens } = await classifyDocument(
-            ocrResult.text,
+            pageImages,
+            ocrResult.text || '',
             `${file.file_name} (pages ${split.pageStart}-${split.pageEnd})`,
           );
           const result = db.prepare(`
@@ -252,7 +272,7 @@ router.post('/:fileId/edit', async (req, res) => {
           INSERT INTO documents (
             processed_file_id, page_start, page_end, split_group_id,
             classification_error, status, created_at
-          ) VALUES (?, ?, ?, ?, 'OCR failed on split', 'unclassified', datetime('now'))
+          ) VALUES (?, ?, ?, ?, 'No text or images available for split', 'unclassified', datetime('now'))
         `).run(fileId, split.pageStart, split.pageEnd, `split-${suggestion.id}`);
         docId = Number(result.lastInsertRowid);
       }

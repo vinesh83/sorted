@@ -18,7 +18,7 @@ interface RulesVersion {
   id: number;
   version: number;
   rules_text: string;
-  opus_reasoning: string;
+  model_reasoning: string;
   corrections_analyzed: number;
   accuracy_before: number | null;
   created_at: string;
@@ -201,8 +201,8 @@ function RulesTab() {
             ))}
           </div>
           <div style={styles.rulesReasoning}>
-            <strong>Opus Reasoning:</strong>
-            <p>{active.opus_reasoning}</p>
+            <strong>Model Reasoning:</strong>
+            <p>{active.model_reasoning}</p>
           </div>
         </div>
       ) : (

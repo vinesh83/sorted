@@ -81,7 +81,7 @@ export function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       version INTEGER NOT NULL,
       rules_text TEXT NOT NULL,
-      opus_reasoning TEXT NOT NULL,
+      model_reasoning TEXT NOT NULL,
       corrections_analyzed INTEGER NOT NULL DEFAULT 0,
       accuracy_before REAL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -104,6 +104,13 @@ export function initDb() {
     console.log('[db] Added dropbox_modified_at column');
   } catch {
     // Column already exists — ignore
+  }
+
+  try {
+    db.exec('ALTER TABLE classification_rules RENAME COLUMN opus_reasoning TO model_reasoning');
+    console.log('[db] Renamed opus_reasoning → model_reasoning');
+  } catch {
+    // Column already renamed or table freshly created — ignore
   }
 
   console.log('[db] Schema initialized');

@@ -1,11 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '../db/connection.js';
+import { getCached, putCache } from './filecache.js';
+import { downloadFile } from './dropbox.js';
+import { convertPdfToImages } from './pdf-utils.js';
 
-const OPUS_MODEL = 'claude-opus-4-0-20250514';
+const ANALYSIS_MODEL = 'claude-sonnet-4-6';
 
-// Cost tracking for Opus
-const OPUS_INPUT_COST_PER_M = 15.0;
-const OPUS_OUTPUT_COST_PER_M = 75.0;
+// Sonnet pricing per 1M tokens
+const INPUT_COST_PER_M = 3.0;
+const OUTPUT_COST_PER_M = 15.0;
+
+// Max unique documents to include images for (cost control)
+const MAX_VISION_DOCUMENTS = 10;
 
 let client: Anthropic | null = null;
 
@@ -29,11 +35,18 @@ interface CorrectionRow {
   created_at: string;
 }
 
+interface CorrectionWithContext extends CorrectionRow {
+  extracted_text: string | null;
+  dropbox_path: string | null;
+  pf_id: number | null;
+  mime_type: string | null;
+}
+
 interface RulesRow {
   id: number;
   version: number;
   rules_text: string;
-  opus_reasoning: string;
+  model_reasoning: string;
   corrections_analyzed: number;
   accuracy_before: number | null;
   created_at: string;
@@ -49,7 +62,7 @@ export function getActiveRules(): RulesRow | null {
 }
 
 /**
- * Get count of corrections since the last Opus analysis.
+ * Get count of corrections since the last analysis.
  */
 export function getCorrectionsSinceLastAnalysis(): number {
   const db = getDb();
@@ -78,11 +91,11 @@ export function shouldAutoTrigger(): boolean {
   return getCorrectionsSinceLastAnalysis() >= 10 && canRunAnalysis();
 }
 
-// Concurrency lock to prevent simultaneous Opus analyses
+// Concurrency lock to prevent simultaneous analyses
 let isOptimizing = false;
 
 /**
- * Run Opus analysis on accumulated corrections and generate new classification rules.
+ * Run Sonnet analysis on accumulated corrections and generate new classification rules.
  */
 export async function analyzeCorrectionsAndGenerateRules(): Promise<{
   version: number;
@@ -93,13 +106,47 @@ export async function analyzeCorrectionsAndGenerateRules(): Promise<{
   outputTokens: number;
   cost: number;
 }> {
-  if (isOptimizing) throw new Error('Opus analysis already in progress');
+  if (isOptimizing) throw new Error('Analysis already in progress');
   isOptimizing = true;
 
   try {
     return await _runAnalysis();
   } finally {
     isOptimizing = false;
+  }
+}
+
+/**
+ * Fetch page 1 image for a document. Returns base64 + media type, or null on failure.
+ */
+async function getDocumentImage(
+  pfId: number,
+  dropboxPath: string,
+  mimeType: string | null,
+): Promise<{ base64: string; mediaType: string } | null> {
+  try {
+    // Try local cache first, then Dropbox
+    let buffer = getCached(pfId);
+    if (!buffer) {
+      buffer = await downloadFile(dropboxPath);
+      putCache(pfId, buffer);
+    }
+
+    if (mimeType === 'application/pdf') {
+      const images = await convertPdfToImages(buffer, { firstPage: 1, lastPage: 1 });
+      if (images.length === 0) return null;
+      return { base64: images[0].toString('base64'), mediaType: 'image/jpeg' };
+    } else if (mimeType?.startsWith('image/')) {
+      const mediaType = mimeType === 'image/png' ? 'image/png'
+        : mimeType === 'image/webp' ? 'image/webp'
+        : 'image/jpeg';
+      return { base64: buffer.toString('base64'), mediaType };
+    }
+
+    return null; // DOCX/DOC/other — no image
+  } catch (err) {
+    console.warn(`[prompt-optimizer] Failed to get image for pf_id=${pfId}:`, err instanceof Error ? err.message : err);
+    return null;
   }
 }
 
@@ -115,33 +162,54 @@ async function _runAnalysis(): Promise<{
   const db = getDb();
   const anthropic = getClient();
 
-  // Get corrections since last analysis
+  // Get corrections since last analysis, joined with file paths
   const lastRules = getActiveRules();
   const since = lastRules?.created_at ?? '2000-01-01';
 
   const corrections = db.prepare(`
-    SELECT c.*, d.extracted_text
+    SELECT c.*, d.extracted_text, pf.dropbox_path, pf.id as pf_id, pf.mime_type
     FROM corrections c
     LEFT JOIN documents d ON c.document_id = d.id
+    LEFT JOIN processed_files pf ON d.processed_file_id = pf.id
     WHERE c.created_at > ?
     ORDER BY c.created_at ASC
-  `).all(since) as Array<CorrectionRow & { extracted_text: string | null }>;
+  `).all(since) as CorrectionWithContext[];
 
   if (corrections.length === 0) {
     throw new Error('No new corrections to analyze');
   }
 
-  // Build correction summary for Opus
-  const correctionSummary = corrections.map((c, i) => {
-    const textSnippet = c.extracted_text ? c.extracted_text.slice(0, 500) : '(no text available)';
-    return `Correction ${i + 1}:
-  File: ${c.file_name || 'unknown'}
-  Field: ${c.field_name}
-  AI classified as: "${c.ai_value || '(empty)'}"
-  Paralegal corrected to: "${c.paralegal_value || '(empty)'}"
-  Paralegal: ${c.paralegal_name || 'unknown'}
-  Document text snippet: ${textSnippet}`;
-  }).join('\n\n');
+  // Fetch document images, deduplicated by pf_id, capped at MAX_VISION_DOCUMENTS
+  // Prioritize: documents with no OCR text first, then by correction count
+  const pfCounts = new Map<number, { count: number; hasText: boolean; correction: CorrectionWithContext }>();
+  for (const c of corrections) {
+    if (!c.pf_id || !c.dropbox_path) continue;
+    const existing = pfCounts.get(c.pf_id);
+    if (existing) {
+      existing.count++;
+    } else {
+      pfCounts.set(c.pf_id, { count: 1, hasText: !!c.extracted_text, correction: c });
+    }
+  }
+
+  // Sort: no-text docs first, then by correction count descending
+  const sortedPfs = [...pfCounts.entries()]
+    .sort(([, a], [, b]) => {
+      if (a.hasText !== b.hasText) return a.hasText ? 1 : -1;
+      return b.count - a.count;
+    })
+    .slice(0, MAX_VISION_DOCUMENTS);
+
+  // Fetch images sequentially to avoid Dropbox rate limits
+  const imageMap = new Map<number, { base64: string; mediaType: string }>();
+  for (const [pfId, { correction: c }] of sortedPfs) {
+    const image = await getDocumentImage(pfId, c.dropbox_path!, c.mime_type);
+    if (image) {
+      imageMap.set(pfId, image);
+    }
+  }
+
+  console.log(`[prompt-optimizer] Fetched ${imageMap.size} document images for ${corrections.length} corrections`);
 
   // Get current rules context
   const currentRulesContext = lastRules
@@ -159,15 +227,19 @@ The classifier works at an immigration law firm and classifies scanned documents
 
 Your job: analyze the corrections below, identify patterns, and write clear rules that would prevent these errors in the future.
 
+For each correction, you may see an image of the actual document page. Use the visual content (headers, logos, form numbers, stamps, checkboxes, layout) alongside the text metadata to understand what kind of document was misclassified and why the paralegal's correction is appropriate.
+
 IMPORTANT GUIDELINES:
 - Write rules as clear, specific instructions (not vague guidelines)
 - Each rule should address a concrete pattern seen in the corrections
 - Rules should be concise — one sentence each
 - Include the document type/pattern and the correct classification
+- Reference visual indicators when relevant (e.g., "Documents with USCIS header and form number I-797C should be classified as...")
 - If a correction seems like a one-off mistake (not a pattern), skip it
 - If multiple corrections point to the same pattern, consolidate into one rule
 - Prioritize rules that would have the highest impact (most frequent errors first)
 - Consider that paralegals may use slightly different wording — normalize to canonical terms
+- The firm uses an Asana form with specific naming conventions. For USCIS "Received" documents, the expected label format is "{Form Number}, {Notice Type}" (e.g., "I-130, Receipt Notice"). For NVC, DOS, Court, ICE/DHS, and BIA documents, use the exact notice names from the Asana form. For FOIA responses, use "{Agency} FOIA Response". When generating rules, align corrections toward these canonical label formats.
 - Maximum 20 rules (quality over quantity)
 
 OUTPUT FORMAT:
@@ -180,41 +252,85 @@ Respond with JSON only:
   "estimated_impact": "High/Medium/Low — how much these rules should improve accuracy"
 }`;
 
-  const userMessage = `CLASSIFICATION CORRECTION DATA
+  // Build multi-modal content array
+  const contentBlocks: Anthropic.ContentBlockParam[] = [];
+
+  contentBlocks.push({
+    type: 'text',
+    text: `CLASSIFICATION CORRECTION DATA
 ${corrections.length} corrections from paralegals since last analysis.
 Current accuracy rate: ${accuracyRate}%
 ${currentRulesContext}
-CORRECTIONS:
-${correctionSummary}
+CORRECTIONS:`,
+  });
 
-Analyze these corrections, identify patterns, and generate classification rules.`;
+  for (let i = 0; i < corrections.length; i++) {
+    const c = corrections[i];
+    const image = c.pf_id ? imageMap.get(c.pf_id) : null;
+
+    // Add document image if available
+    if (image) {
+      contentBlocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: image.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+          data: image.base64,
+        },
+      });
+    }
+
+    const textSnippet = c.extracted_text ? c.extracted_text.slice(0, 500) : '(no text available)';
+    contentBlocks.push({
+      type: 'text',
+      text: `Correction ${i + 1}:
+  File: ${c.file_name || 'unknown'}
+  Field: ${c.field_name}
+  AI classified as: "${c.ai_value || '(empty)'}"
+  Paralegal corrected to: "${c.paralegal_value || '(empty)'}"
+  Paralegal: ${c.paralegal_name || 'unknown'}
+  ${image ? '(document image shown above)' : `Document text snippet: ${textSnippet}`}`,
+    });
+  }
+
+  contentBlocks.push({
+    type: 'text',
+    text: 'Analyze these corrections, identify patterns, and generate classification rules.',
+  });
 
   const response = await anthropic.messages.create({
-    model: OPUS_MODEL,
+    model: ANALYSIS_MODEL,
     max_tokens: 4096,
     system: systemPrompt,
-    messages: [{ role: 'user', content: userMessage }],
+    messages: [{ role: 'user', content: contentBlocks }],
   });
 
   const inputTokens = response.usage.input_tokens;
   const outputTokens = response.usage.output_tokens;
-  const cost = (inputTokens / 1_000_000) * OPUS_INPUT_COST_PER_M +
-               (outputTokens / 1_000_000) * OPUS_OUTPUT_COST_PER_M;
+  const cost = (inputTokens / 1_000_000) * INPUT_COST_PER_M +
+               (outputTokens / 1_000_000) * OUTPUT_COST_PER_M;
 
   // Parse response
+  if (!response.content.length) {
+    throw new Error('Empty response from Sonnet (no content blocks returned)');
+  }
   const content = response.content[0];
-  if (content.type !== 'text') throw new Error('Unexpected Opus response type');
+  if (content.type !== 'text') throw new Error('Unexpected response type');
 
   let parsed: { rules: string[]; reasoning: string; estimated_impact: string };
   try {
     let jsonStr = content.text.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    if (jsonStr.match(/^[\s]*```/)) {
+      jsonStr = jsonStr.replace(/^[\s]*```\w*\s*\n?/, '').replace(/\n?\s*```[\s]*$/, '');
     }
     parsed = JSON.parse(jsonStr);
   } catch {
-    console.error('[prompt-optimizer] Failed to parse Opus response:', content.text);
-    throw new Error('Opus response was not valid JSON');
+    console.error('[prompt-optimizer] Failed to parse response:', content.text.slice(0, 500));
+    throw new Error('Analysis response was not valid JSON');
+  }
+
+  if (!Array.isArray(parsed.rules)) {
+    throw new Error(`Expected "rules" to be an array, got: ${typeof parsed.rules}`);
   }
 
   // Build rules text
@@ -227,7 +343,7 @@ Analyze these corrections, identify patterns, and generate classification rules.
   const swapRules = db.transaction(() => {
     db.prepare('UPDATE classification_rules SET active = 0').run();
     db.prepare(`
-      INSERT INTO classification_rules (version, rules_text, opus_reasoning, corrections_analyzed, accuracy_before, active)
+      INSERT INTO classification_rules (version, rules_text, model_reasoning, corrections_analyzed, accuracy_before, active)
       VALUES (?, ?, ?, ?, ?, 1)
     `).run(
       newVersion,
@@ -242,10 +358,10 @@ Analyze these corrections, identify patterns, and generate classification rules.
   // Log usage
   db.prepare(`
     INSERT INTO api_usage (document_id, model, input_tokens, output_tokens, cost_usd, request_type)
-    VALUES (NULL, ?, ?, ?, ?, 'opus_optimization')
-  `).run(OPUS_MODEL, inputTokens, outputTokens, cost);
+    VALUES (NULL, ?, ?, ?, ?, 'sonnet_optimization')
+  `).run(ANALYSIS_MODEL, inputTokens, outputTokens, cost);
 
-  console.log(`[prompt-optimizer] Generated v${newVersion} rules from ${corrections.length} corrections. Cost: $${cost.toFixed(4)}`);
+  console.log(`[prompt-optimizer] Generated v${newVersion} rules from ${corrections.length} corrections (${imageMap.size} with images). Cost: $${cost.toFixed(4)}`);
 
   return {
     version: newVersion,

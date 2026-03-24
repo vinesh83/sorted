@@ -1,5 +1,6 @@
 import Tesseract from 'tesseract.js';
 import mammoth from 'mammoth';
+import { convertPdfToImages } from './pdf-utils.js';
 
 // pdf-parse has ESM compatibility issues — lazy load to handle both tsx and compiled contexts
 let _pdfParse: ((buffer: Buffer, options?: Record<string, unknown>) => Promise<{ text: string; numpages: number }>) | null = null;
@@ -92,46 +93,23 @@ async function extractFromDocx(buffer: Buffer): Promise<OcrResult> {
 }
 
 async function ocrScannedPdf(buffer: Buffer, pageCount: number): Promise<OcrResult> {
-  const { execSync } = await import('child_process');
-  const fs = await import('fs');
-  const os = await import('os');
-  const path = await import('path');
-
-  const tmpDir = os.default.tmpdir();
-  const id = `ocr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const tmpPdf = path.default.join(tmpDir, `${id}.pdf`);
-  const tmpPrefix = path.default.join(tmpDir, id);
-
-  fs.default.writeFileSync(tmpPdf, buffer);
-
   const pagesToOcr = Math.min(pageCount, MAX_PAGES_OCR);
-  let allText = '';
   const partial = pageCount > MAX_PAGES_OCR;
 
-  try {
-    // Convert pages to JPEG images
-    execSync(`pdftoppm -jpeg -r 200 -f 1 -l ${pagesToOcr} "${tmpPdf}" "${tmpPrefix}"`, { timeout: 60000 });
+  const pageImages = await convertPdfToImages(buffer, { dpi: 200, lastPage: pagesToOcr });
 
-    // Find generated images and OCR each
-    const files = fs.default.readdirSync(tmpDir)
-      .filter((f: string) => f.startsWith(id) && f.endsWith('.jpg'))
-      .sort();
-
-    for (const imgFile of files) {
-      const imgPath = path.default.join(tmpDir, imgFile);
-      const imgBuffer = fs.default.readFileSync(imgPath);
-      const result = await ocrWithTesseract(imgBuffer);
-      allText += result.text + '\n';
-      fs.default.unlinkSync(imgPath);
-    }
-
-    console.log(`[ocr] Scanned PDF OCR: ${allText.length} chars from ${files.length} pages`);
-  } catch (err) {
-    console.error('[ocr] pdftoppm/OCR failed:', err);
-  } finally {
-    try { fs.default.unlinkSync(tmpPdf); } catch {}
+  if (pageImages.length === 0) {
+    console.error('[ocr] PDF image conversion failed');
+    return { text: '', partial };
   }
 
+  let allText = '';
+  for (const imgBuffer of pageImages) {
+    const result = await ocrWithTesseract(imgBuffer);
+    allText += result.text + '\n';
+  }
+
+  console.log(`[ocr] Scanned PDF OCR: ${allText.length} chars from ${pageImages.length} pages`);
   return { text: allText.trim(), partial };
 }
 

@@ -1,8 +1,9 @@
 import { getDb } from '../db/connection.js';
 import { downloadFile } from './dropbox.js';
 import { extractText } from './ocr.js';
-import { classifyDocument, classifyDocumentVision, logUsage } from './classifier.js';
+import { classifyDocument, logUsage } from './classifier.js';
 import { putCache } from './filecache.js';
+import { convertPdfToImages } from './pdf-utils.js';
 
 // Concurrency limit for processing
 const MAX_CONCURRENT = 3;
@@ -53,107 +54,24 @@ async function doProcess(processedFileId: number): Promise<void> {
 
   let extractedText = '';
   let ocrPartial = false;
+  let fileBuffer: Buffer;
 
   try {
     // Step 1: Download file from Dropbox and cache locally
-    const fileBuffer = await downloadFile(file.dropbox_path);
+    fileBuffer = await downloadFile(file.dropbox_path);
     putCache(processedFileId, fileBuffer);
     console.log(`[pipeline] Downloaded & cached ${file.file_name} (${fileBuffer.length} bytes)`);
 
-    // Step 2: OCR / text extraction
+    // Step 2: OCR / text extraction (still useful as supplementary context)
     const ocrResult = await extractText(fileBuffer, file.mime_type || 'application/octet-stream', file.file_name);
     extractedText = ocrResult.text;
     ocrPartial = ocrResult.partial;
 
-    if (!extractedText) {
-      console.warn(`[pipeline] No text extracted from ${file.file_name}, trying vision classification...`);
-
-      // Try vision-based classification as fallback
-      const isImage = file.mime_type?.startsWith('image/');
-      if (isImage || file.mime_type === 'application/pdf') {
-        try {
-          let imageBuffer = fileBuffer;
-
-          // For PDFs, we need to convert first page to image
-          // Use poppler's pdftoppm if available, otherwise send as-is for images
-          if (file.mime_type === 'application/pdf') {
-            const { execSync } = await import('child_process');
-            const fs = await import('fs');
-            const os = await import('os');
-            const path = await import('path');
-            const tmpDir = os.default.tmpdir();
-            const tmpPdf = path.default.join(tmpDir, `doctriage-${processedFileId}.pdf`);
-            const tmpImg = path.default.join(tmpDir, `doctriage-${processedFileId}`);
-            fs.default.writeFileSync(tmpPdf, fileBuffer);
-            try {
-              execSync(`pdftoppm -jpeg -f 1 -l 1 -r 200 "${tmpPdf}" "${tmpImg}"`, { timeout: 15000 });
-              // pdftoppm output varies: -1.jpg, -01.jpg, -001.jpg depending on page count
-              const possibleNames = [`${tmpImg}-1.jpg`, `${tmpImg}-01.jpg`, `${tmpImg}-001.jpg`];
-              const jpegPath = possibleNames.find((p) => fs.default.existsSync(p));
-              if (jpegPath) {
-                imageBuffer = fs.default.readFileSync(jpegPath);
-                fs.default.unlinkSync(jpegPath);
-              } else {
-                // Try finding any generated jpg
-                const tmpFiles = fs.default.readdirSync(tmpDir);
-                const match = tmpFiles.find((f: string) => f.startsWith(`doctriage-${processedFileId}`) && f.endsWith('.jpg'));
-                if (match) {
-                  const fullPath = path.default.join(tmpDir, match);
-                  imageBuffer = fs.default.readFileSync(fullPath);
-                  fs.default.unlinkSync(fullPath);
-                }
-              }
-            } catch {
-              console.warn(`[pipeline] pdftoppm failed, skipping vision for PDF`);
-              imageBuffer = Buffer.alloc(0); // Mark as failed so we skip vision
-            }
-            fs.default.unlinkSync(tmpPdf);
-          }
-
-          // Skip vision if we couldn't convert PDF to image
-          if (imageBuffer.length === 0) {
-            throw new Error('Could not convert PDF to image for vision classification');
-          }
-
-          const mimeForVision = file.mime_type?.startsWith('image/') ? file.mime_type : 'image/jpeg';
-          const { classification, inputTokens, outputTokens } = await classifyDocumentVision(
-            imageBuffer, mimeForVision, file.file_name,
-          );
-
-          const result = db.prepare(`
-            INSERT INTO documents (
-              processed_file_id, extracted_text, ocr_partial,
-              document_label, client_name, description, event_type, suggested_section,
-              document_date, confidence, is_legal_document,
-              status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'))
-          `).run(
-            processedFileId, '(classified via vision — no OCR text)', 0,
-            classification.documentLabel, classification.clientName,
-            classification.description, classification.eventType,
-            classification.suggestedSection, classification.documentDate,
-            classification.confidence, classification.isLegalDocument ? 1 : 0,
-          );
-          const docId = Number(result.lastInsertRowid);
-          logUsage(docId, inputTokens, outputTokens, 'vision_classification');
-          db.prepare("UPDATE processed_files SET status = 'classified' WHERE id = ?").run(processedFileId);
-          console.log(`[pipeline] Vision classified: ${file.file_name} → ${classification.documentLabel}`);
-          return;
-        } catch (visionErr) {
-          console.error(`[pipeline] Vision classification also failed for ${file.file_name}:`, visionErr);
-        }
-      }
-
-      // If vision also failed, create unclassified document
-      db.prepare("UPDATE processed_files SET status = 'ocr_failed' WHERE id = ?").run(processedFileId);
-      db.prepare(`
-        INSERT INTO documents (processed_file_id, extracted_text, ocr_partial, classification_error, status, created_at)
-        VALUES (?, '', ?, 'OCR and vision classification both failed', 'unclassified', datetime('now'))
-      `).run(processedFileId, ocrPartial ? 1 : 0);
-      return;
+    if (extractedText) {
+      console.log(`[pipeline] Extracted ${extractedText.length} chars from ${file.file_name}`);
+    } else {
+      console.log(`[pipeline] No text extracted from ${file.file_name}`);
     }
-
-    console.log(`[pipeline] Extracted ${extractedText.length} chars from ${file.file_name}`);
   } catch (err) {
     console.error(`[pipeline] Download/OCR error for ${file.file_name}:`, err);
     db.prepare("UPDATE processed_files SET status = 'error' WHERE id = ?").run(processedFileId);
@@ -165,9 +83,42 @@ async function doProcess(processedFileId: number): Promise<void> {
     return;
   }
 
-  // Step 3: AI classification
+  // Step 3: Convert to page images for vision classification
+  let pageImages: Buffer[] = [];
+  let imageMimeType = 'image/jpeg';
+
+  if (file.mime_type === 'application/pdf') {
+    pageImages = await convertPdfToImages(fileBuffer, { dpi: 150 });
+    if (pageImages.length > 0) {
+      console.log(`[pipeline] Converted ${pageImages.length} PDF pages to images`);
+    } else {
+      console.warn(`[pipeline] PDF image conversion failed for ${file.file_name}, using text-only`);
+    }
+  } else if (file.mime_type?.startsWith('image/')) {
+    pageImages = [fileBuffer];
+    imageMimeType = file.mime_type;
+  }
+  // DOCX/DOC/other: pageImages stays empty → text-only classification
+
+  // Must have either images or text to classify
+  if (pageImages.length === 0 && !extractedText) {
+    console.error(`[pipeline] No images or text available for ${file.file_name}`);
+    db.prepare("UPDATE processed_files SET status = 'ocr_failed' WHERE id = ?").run(processedFileId);
+    db.prepare(`
+      INSERT INTO documents (processed_file_id, extracted_text, ocr_partial, classification_error, status, created_at)
+      VALUES (?, '', ?, 'No text or images available for classification', 'unclassified', datetime('now'))
+    `).run(processedFileId, ocrPartial ? 1 : 0);
+    return;
+  }
+
+  // Step 4: AI classification with vision + text
   try {
-    const { classification, inputTokens, outputTokens } = await classifyDocument(extractedText, file.file_name);
+    const { classification, inputTokens, outputTokens } = await classifyDocument(
+      pageImages, extractedText, file.file_name, imageMimeType,
+    );
+
+    const requestType = pageImages.length > 0 ? 'vision_classification' : 'classification';
+    const storedText = extractedText || (pageImages.length > 0 ? '(classified via vision)' : '');
 
     // Insert document with classification
     const result = db.prepare(`
@@ -179,7 +130,7 @@ async function doProcess(processedFileId: number): Promise<void> {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'))
     `).run(
       processedFileId,
-      extractedText,
+      storedText,
       ocrPartial ? 1 : 0,
       classification.documentLabel,
       classification.clientName,
@@ -194,7 +145,7 @@ async function doProcess(processedFileId: number): Promise<void> {
     const documentId = Number(result.lastInsertRowid);
 
     // Log API usage
-    logUsage(documentId, inputTokens, outputTokens, 'classification');
+    logUsage(documentId, inputTokens, outputTokens, requestType);
 
     // Handle multi-doc detection
     if (classification.isMultipleDocuments && classification.suggestedSplits?.length > 0) {

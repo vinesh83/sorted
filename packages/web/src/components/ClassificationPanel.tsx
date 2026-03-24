@@ -109,16 +109,18 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
 
   const [moving, setMoving] = useState(false);
   const [moved, setMoved] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
 
   const handleMoveToSorted = async () => {
     setMoving(true);
+    setMoveError(null);
     try {
       await api.post(`/documents/${doc.id}/move-to-sorted`);
       setMoved(true);
       // Refresh queue to remove this doc, then advance to next
       onRefreshQueue?.();
-    } catch {
-      // ignore
+    } catch (err: unknown) {
+      setMoveError(err instanceof Error ? err.message : 'Move failed');
     } finally {
       setMoving(false);
     }
@@ -199,7 +201,10 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
                     {moving ? 'Moving file...' : 'Move to Sorted Folder'}
                   </button>
                 )}
-                {!moved && !moving && (
+                {moveError && (
+                  <p style={{ color: 'var(--color-error)', fontSize: '13px', marginTop: '6px' }}>{moveError}</p>
+                )}
+                {!moved && !moving && !moveError && (
                   <p style={styles.moveHint}>Moves file to your Sorted subfolder in Dropbox</p>
                 )}
               </div>
@@ -360,8 +365,11 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
         <button onClick={() => onNext()} style={styles.skipButton}>
           Next
         </button>
-        <button onClick={handleMoveToSorted} disabled={moving || moved} style={styles.sortedSmallBtn} title="Move file to /New Sort Folder/Sorted/">
-          {moved ? 'Moved' : moving ? 'Moving...' : 'Move to Sorted'}
+        <button onClick={handleMoveToSorted} disabled={moving || moved} style={{
+          ...styles.sortedSmallBtn,
+          ...(moveError ? { borderColor: 'var(--color-error)', color: 'var(--color-error)' } : {}),
+        }} title={moveError || 'Move file to /New Sort Folder/Sorted/'}>
+          {moved ? 'Moved' : moving ? 'Moving...' : moveError ? 'Move Failed — Retry' : 'Move to Sorted'}
         </button>
         <button
           onClick={handleApprove}

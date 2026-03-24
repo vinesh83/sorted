@@ -6,6 +6,8 @@ import { getDb } from '../db/connection.js';
 import { createTask, moveTaskToSection, attachFile } from '../services/asana.js';
 import { downloadFile, moveFile } from '../services/dropbox.js';
 import { classifyDocument, logUsage } from '../services/classifier.js';
+import { getCached } from '../services/filecache.js';
+import { convertPdfToImages } from '../services/pdf-utils.js';
 import type { EventType, ApproveResult } from 'shared/types.js';
 
 const router = Router();
@@ -47,6 +49,118 @@ router.get('/', (req, res) => {
 
   const documents = db.prepare(sql).all(...params);
   res.json({ documents });
+});
+
+// POST /api/documents/reclassify-all — Re-classify all pending/classified docs and reset corrections
+// NOTE: Must be defined before /:id routes to avoid Express matching "reclassify-all" as an :id param
+router.post('/reclassify-all', async (req, res) => {
+  const db = getDb();
+
+  try {
+    // 1. Clear old corrections and classification rules (obsoleted by new prompt)
+    const deletedCorrections = db.prepare('DELETE FROM corrections').run().changes;
+    const deletedRules = db.prepare('DELETE FROM classification_rules').run().changes;
+
+    // 2. Find all documents eligible for reclassification (not yet approved/sorted)
+    const docs = db.prepare(`
+      SELECT d.id, d.extracted_text, pf.id as pf_id, pf.file_name, pf.mime_type, pf.dropbox_path
+      FROM documents d
+      JOIN processed_files pf ON d.processed_file_id = pf.id
+      WHERE d.status IN ('pending', 'unclassified', 'error')
+    `).all() as { id: number; extracted_text: string | null; pf_id: number; file_name: string; mime_type: string | null; dropbox_path: string }[];
+
+    // 3. Clear paralegal edits on these documents
+    if (docs.length > 0) {
+      db.prepare(`
+        UPDATE documents SET
+          edited_label = NULL, edited_client_name = NULL, edited_description = NULL,
+          edited_event_type = NULL, edited_date = NULL,
+          asana_project_gid = NULL, asana_project_name = NULL,
+          asana_section_gid = NULL, asana_section_name = NULL
+        WHERE status IN ('pending', 'unclassified', 'error')
+      `).run();
+    }
+
+    // 4. Respond immediately, reclassify in background
+    console.log(`[documents] Reclassify-all: cleared ${deletedCorrections} corrections, ${deletedRules} rules, queuing ${docs.length} documents`);
+    res.json({
+      deletedCorrections,
+      deletedRules,
+      documentsQueued: docs.length,
+    });
+
+    // 5. Process each document in background (sequentially to avoid overload)
+    let success = 0;
+    let failed = 0;
+    for (const doc of docs) {
+      try {
+        let pageImages: Buffer[] = [];
+        let imageMimeType = 'image/jpeg';
+        let fileBuffer = getCached(doc.pf_id);
+        if (!fileBuffer) {
+          try {
+            fileBuffer = await downloadFile(doc.dropbox_path);
+          } catch {
+            // File may have been moved/deleted
+          }
+        }
+
+        if (fileBuffer) {
+          if (doc.mime_type === 'application/pdf') {
+            pageImages = await convertPdfToImages(fileBuffer, { dpi: 150 });
+          } else if (doc.mime_type?.startsWith('image/')) {
+            pageImages = [fileBuffer];
+            imageMimeType = doc.mime_type;
+          }
+        }
+
+        const ocrText = doc.extracted_text && !doc.extracted_text.startsWith('(classified via')
+          ? doc.extracted_text : '';
+
+        if (pageImages.length === 0 && !ocrText) {
+          console.warn(`[reclassify] Skipping ${doc.file_name}: no images or text`);
+          failed++;
+          continue;
+        }
+
+        const { classification, inputTokens, outputTokens } = await classifyDocument(
+          pageImages, ocrText, doc.file_name, imageMimeType,
+        );
+
+        db.prepare(`
+          UPDATE documents SET
+            document_label = ?, client_name = ?, description = ?, event_type = ?,
+            suggested_section = ?, document_date = ?, confidence = ?,
+            is_legal_document = ?, classification_error = NULL, status = 'pending'
+          WHERE id = ?
+        `).run(
+          classification.documentLabel,
+          classification.clientName,
+          classification.description,
+          classification.eventType,
+          classification.suggestedSection,
+          classification.documentDate,
+          classification.confidence,
+          classification.isLegalDocument ? 1 : 0,
+          doc.id,
+        );
+
+        logUsage(doc.id, inputTokens, outputTokens, 'reclassification');
+        success++;
+        console.log(`[reclassify] ${success}/${docs.length} ${doc.file_name} → ${classification.documentLabel}`);
+      } catch (err) {
+        failed++;
+        console.error(`[reclassify] Failed ${doc.file_name}:`, err instanceof Error ? err.message : err);
+      }
+    }
+    console.log(`[reclassify] Complete: ${success} succeeded, ${failed} failed out of ${docs.length}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[documents] Reclassify-all failed:', msg);
+    if (!res.headersSent) {
+      res.status(500).json({ error: `Reclassify-all failed: ${msg}` });
+    }
+  }
 });
 
 // GET /api/documents/:id
@@ -318,15 +432,32 @@ router.post('/:id/approve', async (req, res) => {
   if (doc.edited_date && doc.edited_date !== doc.document_date) {
     corrections.push({ field: 'document_date', ai: doc.document_date, human: doc.edited_date });
   }
+  // Log corrections + update status atomically
+  const asanaError = result.errors.length > 0 ? result.errors.join('; ') : null;
   const insertCorrection = db.prepare(`
     INSERT INTO corrections (document_id, field_name, ai_value, paralegal_value, paralegal_name, file_name)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
-  for (const c of corrections) {
-    insertCorrection.run(Number(id), c.field, c.ai, c.human, paralegal, doc.file_name);
-  }
+  const updateStatus = db.prepare(`
+    UPDATE documents
+    SET status = 'approved',
+        assigned_paralegal = ?,
+        asana_error = ?,
+        approved_at = datetime('now'),
+        claimed_by = NULL,
+        claimed_at = NULL
+    WHERE id = ?
+  `);
 
-  // Auto-trigger Opus analysis if threshold met
+  const commitApproval = db.transaction(() => {
+    for (const c of corrections) {
+      insertCorrection.run(Number(id), c.field, c.ai, c.human, paralegal, doc.file_name);
+    }
+    updateStatus.run(paralegal, asanaError, id);
+  });
+  commitApproval();
+
+  // Auto-trigger analysis if threshold met (fire-and-forget, after transaction)
   if (corrections.length > 0 && shouldAutoTrigger()) {
     analyzeCorrectionsAndGenerateRules()
       .then((optimizeResult) => {
@@ -337,19 +468,6 @@ router.post('/:id/approve', async (req, res) => {
         console.error('[auto-optimize] Failed:', err instanceof Error ? err.message : err);
       });
   }
-
-  // Update document status
-  const asanaError = result.errors.length > 0 ? result.errors.join('; ') : null;
-  db.prepare(`
-    UPDATE documents
-    SET status = 'approved',
-        assigned_paralegal = ?,
-        asana_error = ?,
-        approved_at = datetime('now'),
-        claimed_by = NULL,
-        claimed_at = NULL
-    WHERE id = ?
-  `).run(paralegal, asanaError, id);
 
   res.json({
     result: {
@@ -369,23 +487,54 @@ router.post('/:id/retry-classify', async (req, res) => {
   const { id } = req.params;
 
   const doc = db.prepare(`
-    SELECT d.*, pf.file_name FROM documents d
+    SELECT d.*, pf.file_name, pf.mime_type, pf.id as pf_id FROM documents d
     JOIN processed_files pf ON d.processed_file_id = pf.id
     WHERE d.id = ?
-  `).get(id) as { id: number; extracted_text: string | null; file_name: string } | undefined;
+  `).get(id) as { id: number; extracted_text: string | null; file_name: string; mime_type: string | null; pf_id: number } | undefined;
 
   if (!doc) {
     res.status(404).json({ error: 'Document not found' });
     return;
   }
 
-  if (!doc.extracted_text) {
-    res.status(400).json({ error: 'No extracted text available for classification' });
-    return;
-  }
-
   try {
-    const { classification, inputTokens, outputTokens } = await classifyDocument(doc.extracted_text, doc.file_name);
+    // Try to get page images from cached file, or re-download from Dropbox
+    let pageImages: Buffer[] = [];
+    let imageMimeType = 'image/jpeg';
+    let fileBuffer = getCached(doc.pf_id);
+    if (!fileBuffer) {
+      // Cache miss — try re-downloading from Dropbox
+      try {
+        const pf = db.prepare('SELECT dropbox_path FROM processed_files WHERE id = ?').get(doc.pf_id) as { dropbox_path: string } | undefined;
+        if (pf?.dropbox_path) {
+          fileBuffer = await downloadFile(pf.dropbox_path);
+        }
+      } catch (err) {
+        console.warn(`[documents] Failed to re-download file for reclassification:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    if (fileBuffer) {
+      if (doc.mime_type === 'application/pdf') {
+        pageImages = await convertPdfToImages(fileBuffer, { dpi: 150 });
+      } else if (doc.mime_type?.startsWith('image/')) {
+        pageImages = [fileBuffer];
+        imageMimeType = doc.mime_type;
+      }
+    }
+
+    // Filter out placeholder text that isn't real OCR content
+    const ocrText = doc.extracted_text && !doc.extracted_text.startsWith('(classified via')
+      ? doc.extracted_text : '';
+
+    if (pageImages.length === 0 && !ocrText) {
+      res.status(400).json({ error: 'No images or text available for classification' });
+      return;
+    }
+
+    const { classification, inputTokens, outputTokens } = await classifyDocument(
+      pageImages, ocrText, doc.file_name, imageMimeType,
+    );
 
     db.prepare(`
       UPDATE documents SET
