@@ -288,6 +288,7 @@ router.post('/:id/approve', async (req, res) => {
     file_name: string;
     mime_type: string | null;
     dropbox_path: string;
+    dropbox_modified_at: string | null;
     status: string;
   } | undefined;
 
@@ -335,12 +336,24 @@ router.post('/:id/approve', async (req, res) => {
 
   // Step 1: Create task
   try {
+    // Format received date (from Dropbox file modified date)
+    let dateReceived: string | null = null;
+    if (doc.dropbox_modified_at) {
+      try {
+        const rd = new Date(doc.dropbox_modified_at);
+        dateReceived = rd.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      } catch {
+        dateReceived = doc.dropbox_modified_at;
+      }
+    }
+
     const task = await createTask({
       name: taskName,
       paralegalName: paralegal || 'Unknown',
       eventType,
       documentLabel,
       projectGid,
+      dateReceived,
     });
     result.taskGid = task.gid;
     result.taskUrl = task.url;

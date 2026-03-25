@@ -74,10 +74,12 @@ export async function createTask(params: {
   documentLabel: string;
   projectGid: string;
   sectionGid?: string | null;
+  dateReceived?: string | null;
 }): Promise<{ gid: string; url: string }> {
   const enumGid = EVENT_TYPE_ENUM_MAP[params.eventType];
 
-  const htmlNotes = `<body><strong>User:</strong>\n${params.paralegalName}\n\n<strong>Event Type:</strong>\n${params.eventType}\n\n<strong>Document:</strong>\n${params.documentLabel}\n\n———————————————\nThis task was submitted through <strong>Doc Triage</strong></body>`;
+  const receivedLine = params.dateReceived ? `\n\n<strong>Date Received by Office:</strong>\n${params.dateReceived}` : '';
+  const htmlNotes = `<body><strong>User:</strong>\n${params.paralegalName}\n\n<strong>Event Type:</strong>\n${params.eventType}\n\n<strong>Document:</strong>\n${params.documentLabel}${receivedLine}\n\n———————————————\nThis task was submitted through <strong>Doc Triage</strong></body>`;
 
   const taskData = {
     name: params.name,
