@@ -299,7 +299,7 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
             ))}
           </select>
         </FieldRow>
-        <FieldRow label="Date">
+        <FieldRow label="Date on Document">
           <input
             type="date"
             value={docDate}
