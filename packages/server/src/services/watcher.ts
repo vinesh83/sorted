@@ -35,6 +35,24 @@ function getExtension(name: string): string {
   return name.toLowerCase().split('.').pop() || '';
 }
 
+function cleanUpOrphans() {
+  const db = getDb();
+  const orphans = db.prepare(`
+    SELECT pf.id, pf.file_name FROM processed_files pf
+    LEFT JOIN documents d ON d.processed_file_id = pf.id
+    WHERE d.id IS NULL
+      AND pf.processed_at < datetime('now', '-5 minutes')
+  `).all() as Array<{ id: number; file_name: string }>;
+
+  if (orphans.length > 0) {
+    console.log(`[watcher] Cleaning up ${orphans.length} orphaned processed_files`);
+    for (const o of orphans) {
+      db.prepare('DELETE FROM processed_files WHERE id = ?').run(o.id);
+      console.log(`[watcher]   Removed orphan: ${o.file_name}`);
+    }
+  }
+}
+
 function isNewFile(entry: DropboxFileEntry): boolean {
   const db = getDb();
   const existing = db.prepare('SELECT id FROM processed_files WHERE dropbox_file_id = ?').get(entry.id);
@@ -151,6 +169,9 @@ export async function startWatcher() {
 
   watcherRunning = true;
 
+  // Clean up orphaned processed_files before initial scan
+  cleanUpOrphans();
+
   // Initial scan
   try {
     await pollOnce();
@@ -180,26 +201,7 @@ export async function startWatcher() {
 
 export async function rescan() {
   console.log('[watcher] Manual rescan triggered — clearing cursors');
-
-  // Clean up orphaned processed_files (no documents record)
-  // These can occur from server restarts during processing, failed reprocessing, etc.
-  // Only clean up files older than 5 minutes to avoid racing with active pipeline processing.
-  const db = getDb();
-  const orphans = db.prepare(`
-    SELECT pf.id, pf.file_name FROM processed_files pf
-    LEFT JOIN documents d ON d.processed_file_id = pf.id
-    WHERE d.id IS NULL
-      AND pf.processed_at < datetime('now', '-5 minutes')
-  `).all() as Array<{ id: number; file_name: string }>;
-
-  if (orphans.length > 0) {
-    console.log(`[watcher] Cleaning up ${orphans.length} orphaned processed_files`);
-    for (const o of orphans) {
-      db.prepare('DELETE FROM processed_files WHERE id = ?').run(o.id);
-      console.log(`[watcher]   Removed orphan: ${o.file_name}`);
-    }
-  }
-
+  cleanUpOrphans();
   cursors.clear();
   await pollOnce();
 }
