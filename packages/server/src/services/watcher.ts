@@ -111,6 +111,14 @@ async function processNewFiles(entries: DropboxFileEntry[], paralegalName: Paral
           console.error(`[watcher] Pipeline error for ${entry.name}:`, err);
           const db = getDb();
           db.prepare("UPDATE processed_files SET status = 'error' WHERE id = ?").run(fileId);
+          // Ensure a documents record exists so the file shows in the queue
+          const existing = db.prepare('SELECT id FROM documents WHERE processed_file_id = ?').get(fileId);
+          if (!existing) {
+            db.prepare(`
+              INSERT INTO documents (processed_file_id, classification_error, status, created_at)
+              VALUES (?, ?, 'unclassified', datetime('now'))
+            `).run(fileId, `Pipeline error: ${err instanceof Error ? err.message : String(err)}`);
+          }
         })
         .finally(() => {
           processingCount--;
@@ -172,6 +180,26 @@ export async function startWatcher() {
 
 export async function rescan() {
   console.log('[watcher] Manual rescan triggered — clearing cursors');
+
+  // Clean up orphaned processed_files (no documents record)
+  // These can occur from server restarts during processing, failed reprocessing, etc.
+  // Only clean up files older than 5 minutes to avoid racing with active pipeline processing.
+  const db = getDb();
+  const orphans = db.prepare(`
+    SELECT pf.id, pf.file_name FROM processed_files pf
+    LEFT JOIN documents d ON d.processed_file_id = pf.id
+    WHERE d.id IS NULL
+      AND pf.processed_at < datetime('now', '-5 minutes')
+  `).all() as Array<{ id: number; file_name: string }>;
+
+  if (orphans.length > 0) {
+    console.log(`[watcher] Cleaning up ${orphans.length} orphaned processed_files`);
+    for (const o of orphans) {
+      db.prepare('DELETE FROM processed_files WHERE id = ?').run(o.id);
+      console.log(`[watcher]   Removed orphan: ${o.file_name}`);
+    }
+  }
+
   cursors.clear();
   await pollOnce();
 }
