@@ -5,9 +5,10 @@ import type { AsanaProject } from 'shared/types';
 interface Props {
   selectedProject: AsanaProject | null;
   onSelect: (project: AsanaProject) => void;
+  onClear?: () => void;
 }
 
-export function AsanaProjectSearch({ selectedProject, onSelect }: Props) {
+export function AsanaProjectSearch({ selectedProject, onSelect, onClear }: Props) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const { projects, searching, searchProjects } = useAsanaSearch();
@@ -43,7 +44,7 @@ export function AsanaProjectSearch({ selectedProject, onSelect }: Props) {
           <span style={styles.selectedName}>{selectedProject.name}</span>
           <button
             onClick={() => {
-              onSelect({ gid: '', name: '' });
+              if (onClear) onClear();
               setQuery('');
             }}
             style={styles.clearBtn}

@@ -69,6 +69,20 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
     [onUpdate],
   );
 
+  const handleProjectClear = useCallback(
+    async () => {
+      setSelectedProject(null);
+      setSelectedSection(null);
+      await onUpdate({
+        asana_project_gid: null,
+        asana_project_name: null,
+        asana_section_gid: null,
+        asana_section_name: null,
+      });
+    },
+    [onUpdate],
+  );
+
   const handleSectionSelect = useCallback(
     async (section: AsanaSection) => {
       setSelectedSection(section);
@@ -334,6 +348,7 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
         <AsanaProjectSearch
           selectedProject={selectedProject}
           onSelect={handleProjectSelect}
+          onClear={handleProjectClear}
         />
       </div>
 
