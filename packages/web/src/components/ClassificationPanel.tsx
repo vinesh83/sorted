@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Document, AsanaProject, AsanaSection, EventType } from 'shared/types';
+import type { Document, AsanaProject, AsanaSection, EventType, ApproveResult } from 'shared/types';
 import { EVENT_TYPES, EVENT_TYPE_TO_SECTION } from 'shared/types';
 import { api } from '../api/client';
 import { AsanaProjectSearch } from './AsanaProjectSearch';
@@ -25,12 +25,10 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
   const [selectedProject, setSelectedProject] = useState<AsanaProject | null>(null);
   const [selectedSection, setSelectedSection] = useState<AsanaSection | null>(null);
   const [approving, setApproving] = useState(false);
-  const [result, setResult] = useState<{
-    success: boolean; taskUrl?: string; errors: string[];
+  const [result, setResult] = useState<(ApproveResult & {
     taskName?: string; projectName?: string; sectionName?: string;
     eventType?: string; documentLabel?: string;
-    taskCreated?: boolean; sectionMoved?: boolean; fileAttached?: boolean;
-  } | null>(null);
+  }) | null>(null);
 
   // Populate fields from document
   useEffect(() => {
@@ -92,10 +90,13 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
         edited_event_type: eventType || null,
         edited_date: docDate || null,
       });
-      const res = await onApprove() as { success: boolean; taskUrl?: string; errors: string[] } | null;
-      if (res) setResult(res);
+      const res = await onApprove() as ApproveResult | null;
+      if (res) {
+        setResult(res);
+        if (res.movedToSorted) onRefreshQueue?.();
+      }
     } catch (err) {
-      setResult({ success: false, taskUrl: undefined, errors: [err instanceof Error ? err.message : 'Unknown error'] });
+      setResult({ success: false, taskCreated: false, sectionMoved: false, fileAttached: false, movedToSorted: false, errors: [err instanceof Error ? err.message : 'Unknown error'] });
     } finally {
       setApproving(false);
     }
@@ -186,23 +187,25 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
                 </div>
               )}
 
-              {/* Move to Sorted Folder */}
+              {/* Move to Sorted Folder — auto-moved after approval */}
               <div style={styles.moveSection}>
-                {moved ? (
+                {result.movedToSorted || moved ? (
                   <div style={styles.movedConfirm}>
                     <span style={styles.movedIcon}>&#10003;</span>
                     <span>Moved to your <strong>Sorted</strong> folder</span>
                   </div>
                 ) : (
-                  <button onClick={handleMoveToSorted} disabled={moving} style={styles.moveBtn}>
-                    {moving ? 'Moving file...' : 'Move to Sorted Folder'}
-                  </button>
+                  <>
+                    {result.moveError && (
+                      <p style={{ color: 'var(--color-error)', fontSize: '13px', marginBottom: '6px' }}>Auto-move failed: {result.moveError}</p>
+                    )}
+                    <button onClick={handleMoveToSorted} disabled={moving} style={styles.moveBtn}>
+                      {moving ? 'Moving file...' : 'Retry Move to Sorted'}
+                    </button>
+                  </>
                 )}
                 {moveError && (
                   <p style={{ color: 'var(--color-error)', fontSize: '13px', marginTop: '6px' }}>{moveError}</p>
-                )}
-                {!moved && !moving && !moveError && (
-                  <p style={styles.moveHint}>Moves file to your Sorted subfolder in Dropbox</p>
                 )}
               </div>
             </>
@@ -213,6 +216,9 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
               {result.errors.map((e, i) => (
                 <p key={i} style={{ color: 'var(--color-error)', fontSize: '13px' }}>{e}</p>
               ))}
+              <button onClick={() => setResult(null)} style={styles.retryApproveBtn}>
+                Try Again
+              </button>
             </>
           )}
           <button onClick={onNext} style={styles.nextButton}>
@@ -350,8 +356,9 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
         </button>
         <button onClick={handleMoveToSorted} disabled={moving || moved} style={{
           ...styles.sortedSmallBtn,
+          ...(moved ? { opacity: 0.6 } : {}),
           ...(moveError ? { borderColor: 'var(--color-error)', color: 'var(--color-error)' } : {}),
-        }} title={moveError || 'Move file to /New Sort Folder/Sorted/'}>
+        }} title="Move to Sorted without creating a task">
           {moved ? 'Moved' : moving ? 'Moving...' : moveError ? 'Move Failed — Retry' : 'Move to Sorted'}
         </button>
         <button
@@ -409,4 +416,5 @@ const styles: Record<string, React.CSSProperties> = {
   movedConfirm: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 16px', background: '#ecfdf5', borderRadius: '8px', color: 'var(--color-success)', fontSize: '14px', fontWeight: 500 },
   movedIcon: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', borderRadius: '50%', background: 'var(--color-success)', color: '#fff', fontSize: '14px', fontWeight: 700 },
   moveHint: { fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '4px' },
+  retryApproveBtn: { padding: '10px 24px', borderRadius: '6px', border: '2px solid var(--color-primary)', background: '#fff', color: 'var(--color-primary)', fontSize: '14px', fontWeight: 600, cursor: 'pointer', marginTop: '4px' },
 };

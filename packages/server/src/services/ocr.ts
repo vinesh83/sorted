@@ -2,16 +2,33 @@ import Tesseract from 'tesseract.js';
 import mammoth from 'mammoth';
 import { convertPdfToImages } from './pdf-utils.js';
 
-// pdf-parse has ESM compatibility issues — lazy load to handle both tsx and compiled contexts
+// pdf-parse v2 exports a named class `PDFParse` (not a default export)
 let _pdfParse: ((buffer: Buffer, options?: Record<string, unknown>) => Promise<{ text: string; numpages: number }>) | null = null;
 
 async function getPdfParse() {
   if (_pdfParse) return _pdfParse;
   try {
-    // Try ESM dynamic import first (works in compiled output)
     const mod = await import('pdf-parse');
-    _pdfParse = (mod as any).default || mod;
-  } catch {
+    // v2 ESM: named export PDFParse class with a .default() static method or callable constructor
+    // v1 CJS: default export is the function itself
+    const PdfParse = (mod as any).PDFParse || (mod as any).default?.PDFParse || (mod as any).default || mod;
+    if (typeof PdfParse === 'function' && PdfParse.prototype) {
+      // v2 class — wrap it to match the v1 API (buffer, options) => { text, numpages }
+      _pdfParse = async (buffer: Buffer, options?: Record<string, unknown>) => {
+        const parser = new PdfParse(buffer);
+        const result = await parser.parse();
+        return {
+          text: result.text || '',
+          numpages: result.pages?.length || result.numpages || 0,
+        };
+      };
+    } else if (typeof PdfParse === 'function') {
+      _pdfParse = PdfParse;
+    } else {
+      throw new Error('pdf-parse: could not find callable export');
+    }
+  } catch (err) {
+    console.error('[ocr] pdf-parse import failed, trying createRequire fallback:', err);
     // Fallback to createRequire for tsx/dev mode
     const { createRequire } = await import('module');
     const req = createRequire(import.meta.url);

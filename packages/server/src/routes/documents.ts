@@ -269,12 +269,13 @@ router.post('/:id/approve', async (req, res) => {
   const paralegal = req.user!.paralegal;
 
   const doc = db.prepare(`
-    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path, pf.dropbox_modified_at
+    SELECT d.*, pf.file_name, pf.mime_type, pf.dropbox_path, pf.dropbox_modified_at, pf.paralegal_name
     FROM documents d
     JOIN processed_files pf ON d.processed_file_id = pf.id
     WHERE d.id = ?
   `).get(id) as {
     id: number;
+    processed_file_id: number;
     document_label: string | null;
     client_name: string | null;
     edited_label: string | null;
@@ -285,10 +286,12 @@ router.post('/:id/approve', async (req, res) => {
     edited_date: string | null;
     asana_project_gid: string | null;
     asana_section_gid: string | null;
+    asana_task_gid: string | null;
     file_name: string;
     mime_type: string | null;
     dropbox_path: string;
     dropbox_modified_at: string | null;
+    paralegal_name: string;
     status: string;
   } | undefined;
 
@@ -297,8 +300,8 @@ router.post('/:id/approve', async (req, res) => {
     return;
   }
 
-  // Guard against double-approval
-  if (doc.status === 'approved' || doc.status === 'sorted') {
+  // Guard against double-approval (allow 'sorted' if no task was created yet — user moved to sorted first)
+  if (doc.status === 'approved' || (doc.status === 'sorted' && doc.asana_task_gid)) {
     res.status(409).json({ error: 'Document already approved' });
     return;
   }
@@ -331,6 +334,7 @@ router.post('/:id/approve', async (req, res) => {
     taskCreated: false,
     sectionMoved: false,
     fileAttached: false,
+    movedToSorted: false,
     errors: [],
   };
 
@@ -365,10 +369,11 @@ router.post('/:id/approve', async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors.push(`Task creation failed: ${msg}`);
+    console.error(`[documents] Approve failed for doc ${id}: Task creation failed: ${msg}`);
     db.prepare(`
       UPDATE documents SET status = 'error', asana_error = ?, assigned_paralegal = ? WHERE id = ?
     `).run(`Task creation failed: ${msg}`, paralegal, id);
-    res.status(500).json({ result });
+    res.status(500).json({ error: `Task creation failed: ${msg}`, result });
     return;
   }
 
@@ -460,6 +465,20 @@ router.post('/:id/approve', async (req, res) => {
     updateStatus.run(paralegal, asanaError, id);
   });
   commitApproval();
+
+  // Step 4: Auto-move file to Sorted folder in Dropbox
+  try {
+    const sortedPath = `/New Sort Folder/${doc.paralegal_name}/Sorted/${doc.file_name}`;
+    const actualPath = await moveFile(doc.dropbox_path, sortedPath);
+    db.prepare('UPDATE processed_files SET dropbox_path = ? WHERE id = ?')
+      .run(actualPath, doc.processed_file_id);
+    db.prepare("UPDATE documents SET status = 'sorted' WHERE id = ?").run(id);
+    result.movedToSorted = true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[documents] Auto move-to-sorted failed:', msg);
+    result.moveError = msg;
+  }
 
   res.json({
     result: {

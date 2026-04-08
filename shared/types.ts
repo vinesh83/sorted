@@ -134,6 +134,8 @@ export interface ApproveResult {
   taskCreated: boolean;
   sectionMoved: boolean;
   fileAttached: boolean;
+  movedToSorted: boolean;
+  moveError?: string;
   errors: string[];
 }
 
