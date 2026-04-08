@@ -81,7 +81,7 @@ export async function createTask(params: {
   const receivedLine = params.dateReceived ? `\n\n<strong>Date Received by Office:</strong>\n${params.dateReceived}` : '';
   const htmlNotes = `<body><strong>User:</strong>\n${params.paralegalName}\n\n<strong>Event Type:</strong>\n${params.eventType}\n\n<strong>Document:</strong>\n${params.documentLabel}${receivedLine}\n\n———————————————\nThis task was submitted through <strong>Doc Triage</strong></body>`;
 
-  const taskData = {
+  const taskData: Record<string, unknown> = {
     name: params.name,
     html_notes: htmlNotes,
     projects: [params.projectGid],
@@ -90,8 +90,20 @@ export async function createTask(params: {
     },
   };
 
-  const task = (await asanaPost('/tasks', taskData)) as { gid: string; permalink_url: string };
-  return { gid: task.gid, url: task.permalink_url };
+  try {
+    const task = (await asanaPost('/tasks', taskData)) as { gid: string; permalink_url: string };
+    return { gid: task.gid, url: task.permalink_url };
+  } catch (err) {
+    // If the custom field isn't on this project, retry without it
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Custom field') && msg.includes('is not on given object')) {
+      console.warn(`[asana] Event Type custom field not on project ${params.projectGid}, creating task without it`);
+      delete taskData.custom_fields;
+      const task = (await asanaPost('/tasks', taskData)) as { gid: string; permalink_url: string };
+      return { gid: task.gid, url: task.permalink_url };
+    }
+    throw err;
+  }
 }
 
 // Move task to a section
