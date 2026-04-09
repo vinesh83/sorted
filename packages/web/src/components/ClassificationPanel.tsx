@@ -376,6 +376,16 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
         }} title="Move to Sorted without creating a task">
           {moved ? 'Moved' : moving ? 'Moving...' : moveError ? 'Move Failed — Retry' : 'Move to Sorted'}
         </button>
+        {moveError && moveError.toLowerCase().includes('not_found') && (
+          <button onClick={onSkip} style={{
+            ...styles.sortedSmallBtn,
+            borderColor: 'var(--color-error)',
+            color: 'var(--color-error)',
+            fontSize: '12px',
+          }} title="File no longer exists in Dropbox — remove from queue">
+            Dismiss
+          </button>
+        )}
         <button
           onClick={handleApprove}
           disabled={approving || !selectedProject || !eventType}

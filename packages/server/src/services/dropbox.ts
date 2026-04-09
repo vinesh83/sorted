@@ -236,6 +236,11 @@ export async function moveFile(fromPath: string, toPath: string): Promise<string
   return data.metadata.path_display;
 }
 
+/** Check if a Dropbox API error indicates the source file no longer exists */
+export function isPathNotFound(errorMessage: string): boolean {
+  return errorMessage.includes('path/not_found') || errorMessage.includes('"not_found"');
+}
+
 export function getParalegalFolders(): Array<{ name: ParalegalName; path: string }> {
   return (Object.entries(PARALEGAL_FOLDERS) as Array<[ParalegalName, string]>).map(
     ([name, path]) => ({ name, path }),

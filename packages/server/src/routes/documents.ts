@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { verifyToken } from '../middleware/auth.js';
 import { getDb } from '../db/connection.js';
 import { createTask, moveTaskToSection, attachFile } from '../services/asana.js';
-import { downloadFile, moveFile } from '../services/dropbox.js';
+import { downloadFile, moveFile, isPathNotFound } from '../services/dropbox.js';
 import { classifyDocument, logUsage } from '../services/classifier.js';
 import { getCached } from '../services/filecache.js';
 import { convertPdfToImages } from '../services/pdf-utils.js';
@@ -403,7 +403,11 @@ router.post('/:id/approve', async (req, res) => {
       result.fileAttached = true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      result.errors.push(`File attachment failed: ${msg}`);
+      if (isPathNotFound(msg)) {
+        result.errors.push('File attachment skipped — source file no longer exists in Dropbox');
+      } else {
+        result.errors.push(`File attachment failed: ${msg}`);
+      }
     }
   }
 
@@ -477,7 +481,14 @@ router.post('/:id/approve', async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[documents] Auto move-to-sorted failed:', msg);
-    result.moveError = msg;
+
+    // File already gone from Dropbox — mark as sorted since it's no longer in the inbox
+    if (isPathNotFound(msg)) {
+      db.prepare("UPDATE documents SET status = 'sorted' WHERE id = ?").run(id);
+      result.movedToSorted = true;
+    } else {
+      result.moveError = msg;
+    }
   }
 
   res.json({
@@ -678,6 +689,14 @@ router.post('/:id/move-to-sorted', async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[documents] Move to sorted failed:', msg);
+
+    // File already gone from Dropbox — mark as sorted since it's no longer in the inbox
+    if (isPathNotFound(msg)) {
+      db.prepare("UPDATE documents SET status = 'sorted' WHERE id = ?").run(id);
+      res.json({ moved: true, alreadyGone: true });
+      return;
+    }
+
     res.status(500).json({ error: `Move failed: ${msg}` });
   }
 });
