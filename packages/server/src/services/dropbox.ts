@@ -155,6 +155,19 @@ export async function listFolderContinue(cursor: string): Promise<{ entries: Dro
   return { entries: allEntries, cursor: result.cursor };
 }
 
+/** Escape non-ASCII characters for Dropbox-API-Arg HTTP header (must be ASCII-safe) */
+function escapeNonAscii(str: string): string {
+  return str.replace(/[^\x20-\x7E]/g, (ch) => {
+    const code = ch.codePointAt(0)!;
+    if (code <= 0xFFFF) return `\\u${code.toString(16).padStart(4, '0')}`;
+    // Surrogate pair for characters above U+FFFF
+    const offset = code - 0x10000;
+    const hi = 0xD800 + (offset >> 10);
+    const lo = 0xDC00 + (offset & 0x3FF);
+    return `\\u${hi.toString(16)}\\u${lo.toString(16)}`;
+  });
+}
+
 export async function downloadFile(path: string): Promise<Buffer> {
   const token = await getAccessToken();
   await ensureRootNamespace(token);
@@ -162,7 +175,7 @@ export async function downloadFile(path: string): Promise<Buffer> {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'Dropbox-API-Arg': JSON.stringify({ path }),
+      'Dropbox-API-Arg': escapeNonAscii(JSON.stringify({ path })),
       ...getPathRootHeader(),
     },
   });
