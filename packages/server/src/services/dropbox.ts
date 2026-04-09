@@ -242,7 +242,10 @@ export async function moveFile(fromPath: string, toPath: string): Promise<string
  *  - from_lookup/not_found (move_v2 — source file missing)
  */
 export function isPathNotFound(errorMessage: string): boolean {
-  return errorMessage.includes('not_found');
+  return errorMessage.includes('path/not_found')
+    || errorMessage.includes('from_lookup/not_found')
+    || errorMessage.includes('".tag": "not_found"')
+    || errorMessage.includes('".tag":"not_found"');
 }
 
 export function getParalegalFolders(): Array<{ name: ParalegalName; path: string }> {
