@@ -218,7 +218,7 @@ export function ClassificationPanel({ document: doc, onUpdate, onApprove, onSkip
                     </button>
                   </>
                 )}
-                {moveError && (
+                {moveError && !moved && (
                   <p style={{ color: 'var(--color-error)', fontSize: '13px', marginTop: '6px' }}>{moveError}</p>
                 )}
               </div>
