@@ -7,20 +7,33 @@ import { DocumentViewer } from '../components/DocumentViewer';
 import { ClassificationPanel } from '../components/ClassificationPanel';
 import { PARALEGALS, type Document, type ParalegalName } from 'shared/types';
 
+interface ServerStatus {
+  processingCount: number;
+  gmailWatcherRunning?: boolean;
+  gmailConnected?: boolean;
+  gmailLastCheckedAt?: string | null;
+}
+
 function useServerStatus() {
-  const [processingCount, setProcessingCount] = useState(0);
+  const [status, setStatus] = useState<ServerStatus>({ processingCount: 0 });
   useEffect(() => {
     const poll = async () => {
       try {
-        const data = await api.get<{ processingCount: number }>('/status');
-        setProcessingCount(data.processingCount);
+        const data = await api.get<ServerStatus>('/status');
+        setStatus(data);
       } catch {}
     };
     poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
   }, []);
-  return { processingCount };
+  return status;
+}
+
+function gmailTooltip(lastCheckedAt?: string | null): string {
+  if (!lastCheckedAt) return 'Gmail ingest — not yet checked';
+  const secs = Math.max(0, Math.round((Date.now() - new Date(lastCheckedAt).getTime()) / 1000));
+  return `Gmail ingest — last checked ${secs}s ago`;
 }
 
 export function ReviewPage() {
@@ -28,7 +41,7 @@ export function ReviewPage() {
   const { documents, loading: docsLoading, refresh } = useDocuments(paralegal, 'pending');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const { document: selectedDoc, updateField, claim, skip, approve, retryClassify, retryAttach } = useDocument(selectedId);
-  const { processingCount } = useServerStatus();
+  const { processingCount, gmailWatcherRunning, gmailConnected, gmailLastCheckedAt } = useServerStatus();
 
   // Find the processed_file_id for the selected document
   const processedFileId = selectedDoc?.processed_file_id ?? null;
@@ -90,6 +103,20 @@ export function ReviewPage() {
             <span style={styles.processingBadge}>
               <span style={styles.processingDot} />
               New files processing...
+            </span>
+          )}
+          {gmailWatcherRunning && (
+            <span
+              style={gmailConnected ? styles.gmailBadgeOk : styles.gmailBadgeOff}
+              title={gmailTooltip(gmailLastCheckedAt)}
+            >
+              <span
+                style={{
+                  ...styles.gmailDot,
+                  background: gmailConnected ? '#16a34a' : '#9ca3af',
+                }}
+              />
+              {gmailConnected ? 'Gmail ✓' : 'Gmail ⚠'}
             </span>
           )}
         </div>
@@ -187,6 +214,17 @@ const styles: Record<string, React.CSSProperties> = {
     width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b',
     animation: 'pulse 1.5s ease-in-out infinite',
   },
+  gmailBadgeOk: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '3px 10px', borderRadius: '999px', background: '#dcfce7',
+    color: '#166534', fontSize: '12px', fontWeight: 500, cursor: 'default',
+  },
+  gmailBadgeOff: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    padding: '3px 10px', borderRadius: '999px', background: '#f3f4f6',
+    color: '#6b7280', fontSize: '12px', fontWeight: 500, cursor: 'default',
+  },
+  gmailDot: { width: '8px', height: '8px', borderRadius: '50%' },
   link: { color: 'var(--color-primary)', fontSize: '13px', textDecoration: 'none' },
   logoutBtn: {
     background: 'none', border: '1px solid var(--color-border)',

@@ -88,6 +88,25 @@ export function initDb() {
       active INTEGER DEFAULT 1
     );
 
+    -- Tracks Gmail messages whose attachments were ingested into Dropbox.
+    -- The Gmail label is the primary dedup mechanism; this is audit + safety net.
+    CREATE TABLE IF NOT EXISTS gmail_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      gmail_message_id TEXT UNIQUE NOT NULL,
+      from_address TEXT,
+      subject TEXT,
+      received_at TEXT,
+      attachment_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'processed',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Generic key/value store for app state (e.g. gmail_baseline_done).
+    CREATE TABLE IF NOT EXISTS app_state (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+
   `);
 
   // Migrations for existing databases

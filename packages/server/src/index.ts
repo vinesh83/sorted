@@ -11,6 +11,7 @@ import { asanaRouter } from './routes/asana.js';
 import { filesRouter } from './routes/files.js';
 
 import { startWatcher, getWatcherStatus, setOnNewFile, rescan } from './services/watcher.js';
+import { startGmailWatcher, getGmailStatus, ingestNow } from './services/gmail-watcher.js';
 import { processFile } from './services/pipeline.js';
 import { verifyToken } from './middleware/auth.js';
 import {
@@ -63,8 +64,19 @@ app.get('/api/status', verifyToken, (_req, res) => {
     pendingCount: counts.pendingCount,
     approvedCount: counts.approvedCount,
     processedFiles: fileCount.count,
+    ...getGmailStatus(),
     timestamp: new Date().toISOString(),
   });
+});
+
+// Manual Gmail ingest — forces an immediate poll of the inbox
+app.post('/api/gmail/ingest', verifyToken, async (_req, res) => {
+  try {
+    const result = await ingestNow();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 // Manual rescan — forces re-reading all folders from scratch
@@ -333,6 +345,11 @@ app.listen(PORT, () => {
   // Start watching Dropbox folders
   startWatcher().catch((err) => {
     console.error('[server] Failed to start watcher:', err);
+  });
+
+  // Start polling Gmail for new attachments (no-op if not configured)
+  startGmailWatcher().catch((err) => {
+    console.error('[server] Failed to start Gmail watcher:', err);
   });
 
   // Run a backup on startup, then every 24 hours
