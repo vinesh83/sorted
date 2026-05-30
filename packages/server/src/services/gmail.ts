@@ -248,19 +248,22 @@ export function extractAttachments(payload: GmailPart | undefined): ExtractedAtt
     const mimeType = part.mimeType ?? 'application/octet-stream';
     const size = part.body?.size ?? 0;
     const isImage = mimeType.startsWith('image/');
-    const isInline = disposition.includes('inline');
     const isAttachment = disposition.includes('attachment');
 
-    // Skip content embedded in the message body (signature logos etc.).
-    // IMPORTANT: Gmail adds a Content-ID to GENUINE attachments too (e.g. docs
-    // attached via the web composer), so a Content-ID alone must NOT disqualify
-    // a real attachment. Only skip parts explicitly marked inline, or images
-    // that carry a Content-ID but are NOT marked as an attachment (embedded art).
-    if (isInline) return;
-    if (isImage && hasContentId && !isAttachment) return;
-
-    // Skip tiny images (tracking pixels / icons)
-    if (isImage && size > 0 && size < minImageBytes) return;
+    // The "embedded junk" heuristics (inline / Content-ID / tiny-size) exist to
+    // drop signature logos, tracking pixels and inline graphics. They must apply
+    // ONLY to images that are NOT explicit attachments. Everything else is a real
+    // document and is always kept:
+    //   - any part with Content-Disposition: attachment (any type, any size), and
+    //   - any non-image part with a filename (pdf/docx/etc.) even if marked inline
+    //     or sent with no disposition at all.
+    // (Gmail also stamps a Content-ID on genuine attachments, so Content-ID alone
+    // never disqualifies anything.)
+    if (!isAttachment && isImage) {
+      if (disposition.includes('inline')) return;        // embedded inline image
+      if (hasContentId) return;                           // cid-referenced embedded image
+      if (size > 0 && size < minImageBytes) return;       // tracking pixel / tiny icon
+    }
 
     out.push({ filename, attachmentId, mimeType, size });
   };
