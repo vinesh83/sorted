@@ -2,11 +2,16 @@
 export const PARALEGALS = ['Dalia', 'Vero', 'Madonna'] as const;
 export type ParalegalName = (typeof PARALEGALS)[number];
 
+// Dropbox root where new email attachments land for manual sorting.
+// The watcher only monitors the paralegal subfolders below, NOT this root —
+// so files dropped here are not auto-classified until moved into a subfolder.
+export const NEW_SORT_ROOT = '/New Sort Folder';
+
 // Dropbox folder mapping
 export const PARALEGAL_FOLDERS: Record<ParalegalName, string> = {
-  Dalia: '/New Sort Folder/Dalia',
-  Vero: '/New Sort Folder/Vero',
-  Madonna: '/New Sort Folder/Madonna',
+  Dalia: `${NEW_SORT_ROOT}/Dalia`,
+  Vero: `${NEW_SORT_ROOT}/Vero`,
+  Madonna: `${NEW_SORT_ROOT}/Madonna`,
 };
 
 // Event types from "Duplicate of Events 2.0" form
@@ -154,4 +159,9 @@ export interface StatusResponse {
   processingCount: number;
   classifiedCount: number;
   approvedCount: number;
+  // Gmail ingest status
+  gmailWatcherRunning?: boolean;
+  gmailConnected?: boolean;
+  gmailLastCheckedAt?: string | null;
+  gmailProcessedTotal?: number;
 }

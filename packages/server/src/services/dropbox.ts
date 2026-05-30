@@ -189,6 +189,40 @@ export async function downloadFile(path: string): Promise<Buffer> {
   return Buffer.from(arrayBuf);
 }
 
+/** Upload raw bytes to Dropbox. Uses autorename so a name collision yields
+ *  "name (1).ext" instead of overwriting. Returns the actual path_display
+ *  (which reflects any rename). */
+export async function uploadFile(
+  path: string,
+  data: Buffer,
+  mode: 'add' | 'overwrite' = 'add',
+): Promise<string> {
+  const token = await getAccessToken();
+  await ensureRootNamespace(token);
+  const res = await fetch(`${DROPBOX_CONTENT}/files/upload`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/octet-stream',
+      'Dropbox-API-Arg': escapeNonAscii(
+        JSON.stringify({ path, mode, autorename: true, mute: true }),
+      ),
+      ...getPathRootHeader(),
+    },
+    // Buffer is a valid fetch body at runtime; cast past the DOM BodyInit type
+    // (which rejects Uint8Array<ArrayBufferLike> under TS 5.7's typed-array change).
+    body: data as unknown as BodyInit,
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Dropbox upload failed for ${path}: ${err}`);
+  }
+
+  const result = (await res.json()) as { path_display: string };
+  return result.path_display;
+}
+
 export function getMimeType(fileName: string): string {
   const ext = fileName.toLowerCase().split('.').pop();
   switch (ext) {
