@@ -243,16 +243,24 @@ export function extractAttachments(payload: GmailPart | undefined): ExtractedAtt
     const filename = part.filename?.trim();
     if (!attachmentId || !filename) return;
 
-    // Skip inline-embedded content (signature logos etc.)
-    const disposition = getHeader(part.headers, 'Content-Disposition') ?? '';
+    const disposition = (getHeader(part.headers, 'Content-Disposition') ?? '').toLowerCase();
     const hasContentId = Boolean(getHeader(part.headers, 'Content-ID'));
-    if (/inline/i.test(disposition) || hasContentId) return;
-
     const mimeType = part.mimeType ?? 'application/octet-stream';
     const size = part.body?.size ?? 0;
+    const isImage = mimeType.startsWith('image/');
+    const isInline = disposition.includes('inline');
+    const isAttachment = disposition.includes('attachment');
+
+    // Skip content embedded in the message body (signature logos etc.).
+    // IMPORTANT: Gmail adds a Content-ID to GENUINE attachments too (e.g. docs
+    // attached via the web composer), so a Content-ID alone must NOT disqualify
+    // a real attachment. Only skip parts explicitly marked inline, or images
+    // that carry a Content-ID but are NOT marked as an attachment (embedded art).
+    if (isInline) return;
+    if (isImage && hasContentId && !isAttachment) return;
 
     // Skip tiny images (tracking pixels / icons)
-    if (mimeType.startsWith('image/') && size > 0 && size < minImageBytes) return;
+    if (isImage && size > 0 && size < minImageBytes) return;
 
     out.push({ filename, attachmentId, mimeType, size });
   };
